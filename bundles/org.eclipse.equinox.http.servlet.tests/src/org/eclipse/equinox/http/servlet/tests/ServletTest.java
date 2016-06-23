@@ -7,10 +7,14 @@
  *
  * Contributors:
  *     IBM Corporation - initial API and implementation
- *     Raymond Augé <raymond.auge@liferay.com> - Bug 436698
+ *     Raymond Augé - bug fixes and enhancements
+ *     Juan Gonzalez <juan.gonzalez@liferay.com> - Bug 486412
  *******************************************************************************/
 package org.eclipse.equinox.http.servlet.tests;
 
+import static org.junit.Assert.*;
+
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -21,12 +25,13 @@ import java.lang.reflect.Method;
 import java.net.CookieHandler;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
-
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Dictionary;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;
@@ -64,13 +69,13 @@ import javax.servlet.http.HttpSessionIdListener;
 import javax.servlet.http.HttpSessionListener;
 import javax.servlet.http.Part;
 
-import junit.framework.TestCase;
-
+import org.apache.commons.fileupload.FileItem;
+import org.apache.commons.fileupload.FileUploadException;
+import org.apache.commons.fileupload.disk.DiskFileItemFactory;
+import org.apache.commons.fileupload.servlet.ServletFileUpload;
 import org.eclipse.equinox.http.servlet.ExtendedHttpService;
 import org.eclipse.equinox.http.servlet.context.ContextPathCustomizer;
-import org.eclipse.equinox.http.servlet.tests.bundle.Activator;
-import org.eclipse.equinox.http.servlet.tests.bundle.BundleAdvisor;
-import org.eclipse.equinox.http.servlet.tests.bundle.BundleInstaller;
+import org.eclipse.equinox.http.servlet.testbase.BaseTest;
 import org.eclipse.equinox.http.servlet.tests.util.BaseAsyncServlet;
 import org.eclipse.equinox.http.servlet.tests.util.BaseChangeSessionIdServlet;
 import org.eclipse.equinox.http.servlet.tests.util.BaseHttpContext;
@@ -82,15 +87,13 @@ import org.eclipse.equinox.http.servlet.tests.util.BaseServletContextListener;
 import org.eclipse.equinox.http.servlet.tests.util.BaseServletRequestAttributeListener;
 import org.eclipse.equinox.http.servlet.tests.util.BaseServletRequestListener;
 import org.eclipse.equinox.http.servlet.tests.util.BufferedServlet;
-import org.eclipse.equinox.http.servlet.tests.util.ServletRequestAdvisor;
-
 import org.junit.Assert;
-
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.TestName;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
-import org.osgi.framework.BundleException;
 import org.osgi.framework.Constants;
-import org.osgi.framework.ServiceFactory;
 import org.osgi.framework.ServiceReference;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.framework.hooks.service.FindHook;
@@ -105,49 +108,17 @@ import org.osgi.service.http.runtime.dto.ServletContextDTO;
 import org.osgi.service.http.runtime.dto.ServletDTO;
 import org.osgi.service.http.whiteboard.HttpWhiteboardConstants;
 
-public class ServletTest extends TestCase {
-
-	@Override
-	public void setUp() throws Exception {
-		// Quiet logging for tests
-		System.setProperty("/.LEVEL", "OFF");
-		System.setProperty("org.eclipse.jetty.server.LEVEL", "OFF");
-		System.setProperty("org.eclipse.jetty.servlet.LEVEL", "OFF");
-
-		System.setProperty("org.osgi.service.http.port", "8090");
-		BundleContext bundleContext = getBundleContext();
-		installer = new BundleInstaller(ServletTest.TEST_BUNDLES_BINARY_DIRECTORY, bundleContext);
-		advisor = new BundleAdvisor(bundleContext);
-		String port = getPort();
-		String contextPath = getContextPath();
-		requestAdvisor = new ServletRequestAdvisor(port, contextPath);
-		startBundles();
-		stopJetty();
-		startJetty();
-	}
-
-	@Override
-	public void tearDown() throws Exception {
-		for (ServiceRegistration<? extends Object> serviceRegistration : registrations) {
-			serviceRegistration.unregister();
-		}
-		stopJetty();
-		stopBundles();
-		requestAdvisor = null;
-		advisor = null;
-		registrations.clear();
-		try {
-			installer.shutdown();
-		} finally {
-			installer = null;
-		}
-	}
-
+public class ServletTest extends BaseTest {
+	@Rule
+	public TestName testName = new TestName();
+	
+	
+	@Test
 	public void test_ErrorPage1() throws Exception {
 		String expected = "403 ERROR :";
 		String actual = null;
 		Map<String, List<String>> response = Collections.emptyMap();
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			response = requestAdvisor.request("TestErrorPage1/a", null);
@@ -163,11 +134,12 @@ public class ServletTest extends TestCase {
 			"Expected <" + expected + "*> but got <" + actual + ">", actual.startsWith(expected));
 	}
 
+	@Test
 	public void test_ErrorPage2() throws Exception {
 		String expected = "org.eclipse.equinox.http.servlet.tests.tb1.TestErrorPage2$MyException ERROR :";
 		String actual = null;
 		Map<String, List<String>> response = Collections.emptyMap();
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			response = requestAdvisor.request("TestErrorPage2/a", null);
@@ -183,11 +155,12 @@ public class ServletTest extends TestCase {
 			"Expected <" + expected + "*> but got <" + actual + ">", actual.startsWith(expected));
 	}
 
+	@Test
 	public void test_ErrorPage3() throws Exception {
 		String expected = "400 ERROR :";
 		String actual = null;
 		Map<String, List<String>> response = Collections.emptyMap();
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			response = requestAdvisor.request("TestErrorPage3/a", null);
@@ -207,10 +180,11 @@ public class ServletTest extends TestCase {
 	 * This case should NOT hit the error servlet because the response is already
 	 * committed. However, setting the response code is perfectly allowed.
 	 */
+	@Test
 	public void test_ErrorPage4() throws Exception {
 		String actual = null;
 		Map<String, List<String>> response = Collections.emptyMap();
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			response = requestAdvisor.request("TestErrorPage4/a", null);
@@ -225,6 +199,7 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals("", actual);
 	}
 
+	@Test
 	public void test_ErrorPage5() throws Exception {
 		Dictionary<String, Object> errorProps = new Hashtable<String, Object>();
 		errorProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_NAME, "E5.4xx");
@@ -250,6 +225,7 @@ public class ServletTest extends TestCase {
 	 * This test should also not hit the error servlet as we've only set the
 	 * status. As per the Servlet spec this should not trigger error handling.
 	 */
+	@Test
 	public void test_ErrorPage6() throws Exception {
 		Servlet servlet = new HttpServlet() {
 			private static final long serialVersionUID = 1L;
@@ -287,6 +263,7 @@ public class ServletTest extends TestCase {
 	 * This test should also not hit the error servlet as we've only set the
 	 * status. As per the Servlet spec this should not trigger error handling.
 	 */
+	@Test
 	public void test_ErrorPage7() throws Exception {
 		final int status = 422;
 
@@ -330,6 +307,7 @@ public class ServletTest extends TestCase {
 		Assert.assertNotEquals(status + " : " + status + " : ERROR : /TestErrorPage7/a", responseBody);
 	}
 
+	@Test
 	public void test_ErrorPage8() throws Exception {
 		Servlet servlet = new HttpServlet() {
 			private static final long serialVersionUID = 1L;
@@ -361,6 +339,7 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals("500 : 500 : ERROR : /TestErrorPage8/a", responseBody);
 	}
 
+	@Test
 	public void test_ErrorPage9() throws Exception {
 		Servlet servlet = new HttpServlet() {
 			private static final long serialVersionUID = 1L;
@@ -392,6 +371,7 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals("500 : 500 : ERROR : /TestErrorPage9/a", responseBody);
 	}
 
+	@Test
 	public void test_ErrorPage10() throws Exception {
 		Servlet servlet = new HttpServlet() {
 			private static final long serialVersionUID = 1L;
@@ -425,6 +405,7 @@ public class ServletTest extends TestCase {
 		Assert.fail("Expecting java.io.IOException: Premature EOF");
 	}
 
+	@Test
 	public void test_ErrorPage11() throws Exception {
 		Servlet servlet = new HttpServlet() {
 			private static final long serialVersionUID = 1L;
@@ -452,10 +433,11 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Filter1() throws Exception {
 		String expected = "bab";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestFilter1/bab");
@@ -465,10 +447,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter2() throws Exception {
 		String expected = "cbabc";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestFilter2/cbabc");
@@ -478,10 +461,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter3() throws Exception {
 		String expected = "cbdadbc";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestFilter3/cbdadbc");
@@ -491,10 +475,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter4() throws Exception {
 		String expected = "dcbabcd";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestFilter4/dcbabcd");
@@ -504,10 +489,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter5() throws Exception {
 		String expected = "bab";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("something/bab.TestFilter5");
@@ -517,10 +503,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter6() throws Exception {
 		String expected = "cbabc";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("something/cbabc.TestFilter6");
@@ -530,10 +517,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter7() throws Exception {
 		String expected = "cbdadbc";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("something/cbdadbc.TestFilter7");
@@ -543,10 +531,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter8() throws Exception {
 		String expected = "dcbabcd";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("something/dcbabcd.TestFilter8");
@@ -556,10 +545,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter9() throws Exception {
 		String expected = "bab";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestFilter9/bab");
@@ -569,10 +559,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter10() throws Exception {
 		String expected = "cbabc";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestFilter10/cbabc");
@@ -582,10 +573,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter11() throws Exception {
 		String expected = "cbdadbc";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestFilter11/cbdadbc");
@@ -595,10 +587,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter12() throws Exception {
 		String expected = "dcbabcd";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestFilter12/dcbabcd");
@@ -608,10 +601,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter13() throws Exception {
 		String expected = "bab";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("something/a.TestFilter13");
@@ -621,10 +615,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter14() throws Exception {
 		String expected = "cbabc";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("something/a.TestFilter14");
@@ -634,10 +629,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter15() throws Exception {
 		String expected = "cbdadbc";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("something/a.TestFilter15");
@@ -647,10 +643,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter16() throws Exception {
 		String expected = "dcbabcd";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("something/a.TestFilter16");
@@ -660,10 +657,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter17() throws Exception {
 		String expected = "ebcdadcbe";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestFilter17/foo/bar/baz");
@@ -673,10 +671,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter18() throws Exception {
 		String expected = "dbcacbd";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestFilter18/foo/bar/baz");
@@ -686,10 +685,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Filter19() throws Exception {
 		String expected = "dfbcacbfd";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestFilter18/foo/bar/baz/with/path/info");
@@ -699,32 +699,7 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
-	static class TestFilter implements Filter {
-		AtomicBoolean called = new AtomicBoolean(false);
-		@Override
-		public void init(FilterConfig filterConfig) throws ServletException {
-			// nothing
-		}
-
-		@Override
-		public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
-				throws IOException, ServletException {
-			called.set(true);
-			chain.doFilter(request, response);
-		}
-
-		@Override
-		public void destroy() {
-			// nothing
-		}
-		void clear() {
-			called.set(false);
-		}
-
-		public boolean getCalled() {
-			return called.get();
-		}
-	}
+	@Test
 	public void test_Filter20() throws Exception {
 		// Make sure legacy filter registrations match against all controllers that are for legacy HttpContext
 		// Make sure legacy filter registrations match as if they are prefix matching with wildcards
@@ -750,6 +725,7 @@ public class ServletTest extends TestCase {
 		Assert.assertTrue("testFilter2 did not get called.", testFilter2.getCalled());
 	}
 
+	@Test
 	public void test_Filter21() throws Exception {
 		// Make sure exact path matching is honored by filters registrations
 		String expected = "a";
@@ -799,6 +775,7 @@ public class ServletTest extends TestCase {
 		};
 
 		Servlet servlet2 = new BaseServlet("a") {
+			private static final long serialVersionUID = 1L;
 
 			@Override
 			protected void service(
@@ -855,42 +832,52 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, response);
 	}
 
+	@Test
 	public void test_Filter22a() throws Exception {
 		basicFilterTest22 ( "/f22/*", "*.jsp", "/f22/*", "a", new String[] {"REQUEST"} );
 	}
 
+	@Test
 	public void test_Filter22b() throws Exception {
 		basicFilterTest22 ( "/*", "*.jsp", "/*", "a", new String[] {"REQUEST"} );
 	}
 
+	@Test
 	public void test_Filter22c() throws Exception {
 		basicFilterTest22 ( "/f22/*", "*.jsp", "*.jsp", "a", new String[] {"REQUEST"} );
 	}
 
+	@Test
 	public void test_Filter22d() throws Exception {
 		basicFilterTest22 ( "/f22/*", "*.jsp", "/f22/*", "bab", new String[] {"FORWARD"} );
 	}
 
+	@Test
 	public void test_Filter22e() throws Exception {
 		basicFilterTest22 ( "/*", "*.jsp", "/*", "bab", new String[] {"FORWARD"} );
 	}
 
+	@Test
 	public void test_Filter22f() throws Exception {
 		basicFilterTest22 ( "/f22/*", "*.jsp", "*.jsp", "bab", new String[] {"FORWARD"} );
 	}
 
+	@Test
 	public void test_Filter22g() throws Exception {
 		basicFilterTest22 ( "/f22/*", "*.jsp", "/f22/*", "bab", new String[] {"REQUEST", "FORWARD"} );
 	}
 
+	@Test
 	public void test_Filter22h() throws Exception {
 		basicFilterTest22 ( "/*", "*.jsp", "/*", "bab", new String[] {"REQUEST", "FORWARD"} );
 	}
 
+	@Test
 	public void test_Filter22i() throws Exception {
 		basicFilterTest22 ( "/f22/*", "*.jsp", "*.jsp", "bab", new String[] {"REQUEST", "FORWARD"} );
 	}
 
+	@Test
 	public void test_Filter23a() throws Exception {
 		// Make sure legacy filter registrations match as if they are prefix matching with extension matching
 		String expected = "a";
@@ -920,6 +907,7 @@ public class ServletTest extends TestCase {
 		Assert.assertTrue("testFilter3 did not get called.", testFilter3.getCalled());
 	}
 
+	@Test
 	public void test_Filter23b() throws Exception {
 		// Make sure legacy filter registrations match as if they are prefix matching wildcard, but make sure the prefix is checked
 		String expected = "a";
@@ -942,6 +930,7 @@ public class ServletTest extends TestCase {
 		Assert.assertTrue("testFilter2 did not get called.", testFilter2.getCalled());
 	}
 
+	@Test
 	public void test_Filter23c() throws Exception {
 		// Test WB servlet with default servlet pattern "/" and filter matching against it.
 		String expected = "a";
@@ -964,6 +953,7 @@ public class ServletTest extends TestCase {
 		Assert.assertTrue("testFilter2 did not get called.", testFilter2.getCalled());
 	}
 
+	@Test
 	public void test_Filter24() throws Exception {
 		// Test WB servlet and WB testfilter matching against it.
 		// Test filter gets called.
@@ -995,7 +985,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
-
+	@Test
 	public void test_Registration1() throws Exception {
 		String expected = "Alias cannot be null";
 		try {
@@ -1013,6 +1003,7 @@ public class ServletTest extends TestCase {
 		Assert.fail();
 	}
 
+	@Test
 	public void test_Registration2() throws Exception {
 		String pattern = "blah";
 		String expected = "Invalid pattern '" + pattern + "'";
@@ -1031,6 +1022,7 @@ public class ServletTest extends TestCase {
 		Assert.fail();
 	}
 
+	@Test
 	public void test_Registration3() throws Exception {
 		String pattern = "/blah/";
 		String expected = "Invalid pattern '" + pattern + "'";
@@ -1049,6 +1041,7 @@ public class ServletTest extends TestCase {
 		Assert.fail();
 	}
 
+	@Test
 	public void test_Registration4() throws Exception {
 		String pattern = "/blah";
 		String expected = "Pattern already in use: " + pattern;
@@ -1069,6 +1062,7 @@ public class ServletTest extends TestCase {
 		Assert.fail();
 	}
 
+	@Test
 	public void test_Registration5() throws Exception {
 		String alias = "/blah";
 		String expected = "Servlet cannot be null";
@@ -1087,6 +1081,7 @@ public class ServletTest extends TestCase {
 		Assert.fail();
 	}
 
+	@Test
 	public void test_Registration6() throws Exception {
 		String expected = "Servlet has already been registered:";
 		try {
@@ -1106,6 +1101,7 @@ public class ServletTest extends TestCase {
 		Assert.fail();
 	}
 
+	@Test
 	public void test_unregister() throws Exception {
 		ExtendedHttpService extendedHttpService = (ExtendedHttpService)getHttpService();
 
@@ -1121,6 +1117,7 @@ public class ServletTest extends TestCase {
 		extendedHttpService.unregister("/r1");
 	}
 
+	@Test
 	public void test_Registration11() throws Exception {
 		ExtendedHttpService extendedHttpService = (ExtendedHttpService)getHttpService();
 
@@ -1150,8 +1147,9 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Registration12() throws Exception {
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			BundleContext bundleContext = getBundleContext();
@@ -1173,6 +1171,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Registration13() throws Exception {
 		ExtendedHttpService extendedHttpService = (ExtendedHttpService)getHttpService();
 
@@ -1199,6 +1198,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Registration14() throws Exception {
 		Servlet initError = new HttpServlet() {
 			private static final long serialVersionUID = 1L;
@@ -1219,6 +1219,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Registration15() throws Exception {
 		Servlet initError = new HttpServlet() {
 			private static final long serialVersionUID = 1L;
@@ -1239,6 +1240,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Registration16() throws Exception {
 		Filter initError = new Filter() {
 
@@ -1268,6 +1270,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Registration17() throws Exception {
 		Filter initError = new Filter() {
 
@@ -1297,6 +1300,36 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
+	public void test_Registration18_WhiteboardServletByNameOnly() throws Exception {
+		String expected = "a";
+		final String servletName = "hello_servlet";
+		Servlet namedServlet = new BaseServlet(expected);
+		Servlet targetServlet = new HttpServlet() {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			protected void service(HttpServletRequest request, HttpServletResponse response)
+				throws ServletException, IOException {
+
+				request.getServletContext().getNamedDispatcher(servletName).forward(request, response);
+			}
+
+		};
+
+		Hashtable<String, String> props = new Hashtable<String, String>();
+		props.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_NAME, servletName);
+		registrations.add(getBundleContext().registerService(Servlet.class, namedServlet, props));
+
+		props = new Hashtable<String, String>();
+		props.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, "/s");
+		registrations.add(getBundleContext().registerService(Servlet.class, targetServlet, props));
+
+		String actual = requestAdvisor.request("s");
+		Assert.assertEquals(expected, actual);
+	}
+
+	@Test
 	public void test_RegistrationTCCL1() {
 		final Set<String> filterTCCL = Collections.synchronizedSet(new HashSet<String>());
 		final Set<String> servletTCCL = Collections.synchronizedSet(new HashSet<String>());
@@ -1374,6 +1407,7 @@ public class ServletTest extends TestCase {
 
 	}
 
+	@Test
 	public void test_Sessions01() {
 		final AtomicBoolean valueBound = new AtomicBoolean(false);
 		final AtomicBoolean valueUnbound = new AtomicBoolean(false);
@@ -1479,10 +1513,73 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
+	public void test_Sessions02() {
+		final AtomicReference<HttpSession> sessionReference = new AtomicReference<HttpSession>();
+
+		HttpServlet sessionServlet = new HttpServlet() {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException,
+					IOException {
+				HttpSession session = request.getSession();
+				sessionReference.set(session);
+				if (session.getAttribute("test.attribute") == null) {
+					session.setAttribute("test.attribute", "foo");
+					response.getWriter().print("created");
+				} else {
+					session.setAttribute("test.attribute", null);
+					response.getWriter().print("attribute set to null");
+				}
+			}
+		};
+		ServiceRegistration<Servlet> servletReg = null;
+		Dictionary<String, Object> servletProps = new Hashtable<String, Object>();
+		servletProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, "/sessions");
+		String actual = null;
+		CookieHandler previous = CookieHandler.getDefault();
+		CookieHandler.setDefault(new CookieManager( null, CookiePolicy.ACCEPT_ALL ) );
+		try {
+			servletReg = getBundleContext().registerService(Servlet.class, sessionServlet, servletProps);
+
+			// first call will create the session
+			actual = requestAdvisor.request("sessions");
+			assertEquals("Wrong result", "created", actual);
+
+			// second call will set parameter to null
+			actual = requestAdvisor.request("sessions");
+			assertEquals("Wrong result", "attribute set to null", actual);
+
+			HttpSession httpSession = sessionReference.get();
+
+			Enumeration<String> names = httpSession.getAttributeNames();
+
+			boolean exist = false;
+
+			while (names.hasMoreElements()) {
+				String name = names.nextElement();
+				if (name.equals("test.attribute")) {
+					exist = true;
+				}
+			}
+
+			assertFalse("Session atribute was not removed", exist);
+		} catch (Exception e) {
+			fail("Unexpected exception: " + e);
+		} finally {
+			if (servletReg != null) {
+				servletReg.unregister();
+			}
+			CookieHandler.setDefault(previous);
+		}
+	}
+
+	@Test
 	public void test_Resource1() throws Exception {
 		String expected = "a";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestResource1/resource1.txt");
@@ -1492,10 +1589,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Resource2() throws Exception {
 		String expected = "cbdadbc";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestResource2/resource1.txt");
@@ -1505,10 +1603,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Resource3() throws Exception {
 		String expected = "a";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestResource3/resource1.txt");
@@ -1518,10 +1617,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Resource4() throws Exception {
 		String expected = "dcbabcd";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestResource4/resource1.txt");
@@ -1531,10 +1631,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Resource5() throws Exception {
 		String expected = "dcbabcd";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestResource5/resource1.txt");
@@ -1544,8 +1645,9 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Runtime() throws Exception {
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 
@@ -1566,10 +1668,11 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Servlet1() throws Exception {
-		String expected = ServletTest.STATUS_OK;
+		String expected = STATUS_OK;
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestServlet1");
@@ -1579,10 +1682,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Servlet2() throws Exception {
 		String expected = "3";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestServlet2");
@@ -1593,10 +1697,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Servlet3() throws Exception {
-		String expected = ServletTest.STATUS_OK;
+		String expected = STATUS_OK;
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestServlet3");
@@ -1606,10 +1711,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Servlet4() throws Exception {
-		String expected = System.getProperty(ServletTest.JETTY_PROPERTY_PREFIX + "context.path", "");
+		String expected = System.getProperty(JETTY_PROPERTY_PREFIX + "context.path", "");
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestServlet4");
@@ -1619,10 +1725,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Servlet5() throws Exception {
 		String expected = "Equinox Jetty-based Http Service";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestServlet5");
@@ -1632,10 +1739,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Servlet6() throws Exception {
 		String expected = "a";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("something/a.TestServlet6");
@@ -1645,10 +1753,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Servlet7() throws Exception {
 		String expected = "a";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestServlet7/a");
@@ -1658,10 +1767,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Servlet9() throws Exception {
 		String expected = "Equinox Jetty-based Http Service";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestServlet9");
@@ -1671,10 +1781,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Servlet10() throws Exception {
 		String expected = "a";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestServlet10");
@@ -1684,10 +1795,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Servlet11() throws Exception {
 		String expected = "a";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestServlet11");
@@ -1697,8 +1809,10 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_Servlet12() throws Exception {
 		Servlet sA = new HttpServlet() {
+			private static final long serialVersionUID = 1L;
 
 			@Override
 			protected void service(HttpServletRequest request, HttpServletResponse response)
@@ -1710,6 +1824,7 @@ public class ServletTest extends TestCase {
 		};
 
 		Servlet sB = new HttpServlet() {
+			private static final long serialVersionUID = 1L;
 
 			@Override
 			protected void service(HttpServletRequest request, HttpServletResponse response)
@@ -1730,6 +1845,7 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals("b", requestAdvisor.request("files/help.txt"));
 	}
 
+	@Test
 	public void test_Servlet13() throws Exception {
 		Servlet servlet = new HttpServlet() {
 			private static final long serialVersionUID = 1L;
@@ -1758,8 +1874,10 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals("p=1&p=2|1|[1, 2]", result);
 	}
 
+	@Test
 	public void test_ServletExactMatchPrecidence() throws Exception {
 		Servlet sA = new HttpServlet() {
+			private static final long serialVersionUID = 1L;
 
 			@Override
 			protected void service(HttpServletRequest request, HttpServletResponse response)
@@ -1771,6 +1889,7 @@ public class ServletTest extends TestCase {
 		};
 
 		Servlet sB = new HttpServlet() {
+			private static final long serialVersionUID = 1L;
 
 			@Override
 			protected void service(HttpServletRequest request, HttpServletResponse response)
@@ -1804,6 +1923,7 @@ public class ServletTest extends TestCase {
 	/*
 	 * 3.1 file uploads
 	 */
+	@Test
 	public void test_Servlet16() throws Exception {
 		Servlet servlet = new HttpServlet() {
 			private static final long serialVersionUID = 1L;
@@ -1831,6 +1951,7 @@ public class ServletTest extends TestCase {
 		Dictionary<String, Object> props = new Hashtable<String, Object>();
 		props.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_NAME, "S16");
 		props.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, "/Servlet16/*");
+		props.put("equinox.http.multipartSupported", Boolean.TRUE);
 		registrations.add(getBundleContext().registerService(Servlet.class, servlet, props));
 
 		Map<String, List<Object>> map = new HashMap<String, List<Object>>();
@@ -1846,6 +1967,7 @@ public class ServletTest extends TestCase {
 	/*
 	 * 3.0 file uploads
 	 */
+	@Test
 	public void test_Servlet17() throws Exception {
 		Servlet servlet = new HttpServlet() {
 			private static final long serialVersionUID = 1L;
@@ -1873,6 +1995,7 @@ public class ServletTest extends TestCase {
 		Dictionary<String, Object> props = new Hashtable<String, Object>();
 		props.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_NAME, "S16");
 		props.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, "/Servlet16/*");
+		props.put("equinox.http.multipartSupported", Boolean.TRUE);
 		registrations.add(getBundleContext().registerService(Servlet.class, servlet, props));
 
 		Map<String, List<Object>> map = new HashMap<String, List<Object>>();
@@ -1885,10 +2008,72 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals("blue.png|image/png|292", result.get("responseBody").get(0));
 	}
 
+	@Test
+	public void test_commonsFileUpload() throws Exception {
+		Servlet servlet = new HttpServlet() {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			protected void doPost(HttpServletRequest req, HttpServletResponse resp)
+				throws IOException, ServletException {
+
+				boolean isMultipart = ServletFileUpload.isMultipartContent(req);
+				Assert.assertTrue(isMultipart);
+
+				DiskFileItemFactory factory = new DiskFileItemFactory();
+
+				ServletContext servletContext = this.getServletConfig().getServletContext();
+				File repository = (File) servletContext.getAttribute("javax.servlet.context.tempdir");
+				factory.setRepository(repository);
+				ServletFileUpload upload = new ServletFileUpload(factory);
+
+				List<FileItem> items = null;
+				try {
+					@SuppressWarnings("unchecked")
+					List<FileItem> parseRequest = upload.parseRequest(req);
+					items = parseRequest;
+				} catch (FileUploadException e) {
+					e.printStackTrace();
+				}
+
+				Assert.assertNotNull(items);
+				Assert.assertFalse(items.isEmpty());
+
+				FileItem fileItem = items.get(0);
+
+				String submittedFileName = fileItem.getName();
+				String contentType = fileItem.getContentType();
+				long size = fileItem.getSize();
+
+				PrintWriter writer = resp.getWriter();
+
+				writer.write(submittedFileName);
+				writer.write("|");
+				writer.write(contentType);
+				writer.write("|" + size);
+			}
+		};
+
+		Dictionary<String, Object> props = new Hashtable<String, Object>();
+		props.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_NAME, "S16");
+		props.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, "/Servlet16/*");
+		registrations.add(getBundleContext().registerService(Servlet.class, servlet, props));
+
+		Map<String, List<Object>> map = new HashMap<String, List<Object>>();
+
+		map.put("file", Arrays.<Object>asList(getClass().getResource("blue.png")));
+
+		Map<String, List<String>> result = requestAdvisor.upload("Servlet16/do", map);
+
+		Assert.assertEquals("200", result.get("responseCode").get(0));
+		Assert.assertEquals("blue.png|image/png|292", result.get("responseBody").get(0));
+	}
+
+	@Test
 	public void test_ServletContext1() throws Exception {
 		String expected = "/org/eclipse/equinox/http/servlet/tests/tb1/resource1.txt";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestServletContext1");
@@ -1899,10 +2084,11 @@ public class ServletTest extends TestCase {
 
 	}
 
+	@Test
 	public void test_ServletContext1_2() throws Exception {
 		String expected = "/org/eclipse/equinox/http/servlet/tests/tb1/resource1.txt";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("TestServletContext1");
@@ -1919,6 +2105,7 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_ServletContext2() throws Exception {
 		Servlet servlet = new HttpServlet() {
 			private static final long serialVersionUID = 1L;
@@ -1945,6 +2132,7 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals("200", responseCode);
 	}
 
+	@Test
 	public void testServletContextUnsupportedOperations() {
 		final AtomicReference<ServletContext> contextHolder = new AtomicReference<ServletContext>();
 		Servlet unsupportedServlet = new HttpServlet() {
@@ -2003,6 +2191,7 @@ public class ServletTest extends TestCase {
 		return methods;
 	}
 
+	@Test
 	public void test_ServletContextHelper1() throws Exception {
 		BundleContext bundleContext = getBundleContext();
 		Bundle bundle = bundleContext.getBundle();
@@ -2049,6 +2238,7 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(0, runtimeDTO.failedServletContextDTOs.length);
 	}
 
+	@Test
 	public void test_ServletContextHelper7() throws Exception {
 		String expected = "a";
 
@@ -2082,6 +2272,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_ServletContextHelper8() throws Exception {
 		String expected = "b";
 
@@ -2114,6 +2305,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_ServletContextHelper9() throws Exception {
 		String expected1 = "c";
 		String expected2 = "d";
@@ -2158,6 +2350,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_ServletContextHelperVisibility() throws Exception {
 		String expected1 = "c";
 
@@ -2205,10 +2398,11 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_ServletContextHelper10() throws Exception {
 		String expected = "cac";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("a/TestServletContextHelper10/a");
@@ -2220,6 +2414,7 @@ public class ServletTest extends TestCase {
 
 	private static final String HTTP_CONTEXT_TEST_ROOT = "http.context.test";
 
+	@Test
 	public void test_ServletContextHelper11() throws Exception {
 		BaseHttpContext ctx1 = new BaseHttpContext(true, HTTP_CONTEXT_TEST_ROOT + "/1", getBundleContext().getBundle());
 		BaseHttpContext ctx2 = new BaseHttpContext(true, HTTP_CONTEXT_TEST_ROOT + "/2", getBundleContext().getBundle());
@@ -2242,6 +2437,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_ServletContextHelper12() throws Exception {
 		String expected1 = "a,b,1";
 
@@ -2292,6 +2488,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_ServletContextHelper13() throws Exception {
 		BundleContext bundleContext = getBundleContext();
 		Bundle bundle = bundleContext.getBundle();
@@ -2301,7 +2498,7 @@ public class ServletTest extends TestCase {
 
 			@Override
 			public boolean handleSecurity(HttpServletRequest request, HttpServletResponse response) throws IOException {
-				request.setAttribute(getName(), Boolean.TRUE);
+				request.setAttribute(testName.getMethodName(), Boolean.TRUE);
 				return super.handleSecurity(request, response);
 			}
 
@@ -2315,8 +2512,8 @@ public class ServletTest extends TestCase {
 			@Override
 			public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
 					throws IOException, ServletException {
-				if (request.getAttribute(getName()) == Boolean.TRUE) {
-					request.setAttribute(getName() + ".fromFilter", Boolean.TRUE);
+				if (request.getAttribute(testName.getMethodName()) == Boolean.TRUE) {
+					request.setAttribute(testName.getMethodName() + ".fromFilter", Boolean.TRUE);
 				}
 				chain.doFilter(request, response);
 			}
@@ -2330,7 +2527,7 @@ public class ServletTest extends TestCase {
 			private static final long serialVersionUID = 1L;
 			@Override
 			public void service(ServletRequest req, ServletResponse res) throws ServletException, IOException {
-				res.getWriter().print(req.getAttribute(getName() + ".fromFilter"));
+				res.getWriter().print(req.getAttribute(testName.getMethodName() + ".fromFilter"));
 			}
 
 		};
@@ -2364,6 +2561,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Listener1() throws Exception {
 		BaseServletContextListener scl1 =
 			new BaseServletContextListener();
@@ -2378,6 +2576,7 @@ public class ServletTest extends TestCase {
 		Assert.assertTrue(scl1.destroyed.get());
 	}
 
+	@Test
 	public void test_Listener2() throws Exception {
 		BundleContext bundleContext = getBundleContext();
 		Bundle bundle = bundleContext.getBundle();
@@ -2408,6 +2607,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Listener3() throws Exception {
 		BundleContext bundleContext = getBundleContext();
 		Bundle bundle = bundleContext.getBundle();
@@ -2436,6 +2636,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Listener4() throws Exception {
 
 		BaseServletContextAttributeListener scal1 =
@@ -2479,6 +2680,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Listener5() throws Exception {
 
 		BaseServletRequestListener srl1 = new BaseServletRequestListener();
@@ -2508,6 +2710,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Listener6() throws Exception {
 
 		BaseServletRequestAttributeListener sral1 = new BaseServletRequestAttributeListener();
@@ -2538,6 +2741,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Listener7() throws Exception {
 
 		BaseHttpSessionAttributeListener hsal1 =
@@ -2599,6 +2803,7 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_Listener8() throws Exception {
 		BaseHttpSessionIdListener hsil1 = new BaseHttpSessionIdListener();
 
@@ -2626,6 +2831,115 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
+	public void test_Listener9() throws Exception {
+		Servlet sA = new HttpServlet() {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			protected void doGet(
+				HttpServletRequest req, HttpServletResponse resp)
+				throws ServletException, IOException {
+
+				RequestDispatcher requestDispatcher = req.getRequestDispatcher("/s9B");
+
+				requestDispatcher.include(req, resp);
+			}
+		};
+		Servlet sB = new HttpServlet() {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			protected void doGet(
+				HttpServletRequest req, HttpServletResponse resp)
+				throws ServletException, IOException {
+
+				PrintWriter writer = resp.getWriter();
+				writer.write("S9 included");
+			}
+		};
+
+		BaseServletRequestListener srl1 = new BaseServletRequestListener();
+
+		Collection<ServiceRegistration<?>> registrations = new ArrayList<ServiceRegistration<?>>();
+		try {
+			Dictionary<String, String> listenerProps = new Hashtable<String, String>();
+			listenerProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_LISTENER, "true");
+			registrations.add(getBundleContext().registerService(ServletRequestListener.class, srl1, listenerProps));
+
+			Dictionary<String, String> servletProps1 = new Hashtable<String, String>();
+			servletProps1.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_NAME, "S9A");
+			servletProps1.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, "/s9A");
+			registrations.add(getBundleContext().registerService(Servlet.class, sA, servletProps1));
+
+			servletProps1.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_NAME, "S9B");
+			servletProps1.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, "/s9B");
+			registrations.add(getBundleContext().registerService(Servlet.class, sB, servletProps1));
+
+			String result = requestAdvisor.request("s9A");
+			Assert.assertEquals("S9 included", result);
+
+			Assert.assertEquals(0, srl1.number.get());
+
+		}
+		finally {
+			for (ServiceRegistration<?> registration : registrations) {
+				registration.unregister();
+			}
+		}
+	}
+
+	@Test
+	public void test_Listener10() throws Exception {
+		BaseServletContextListener scl1 = new BaseServletContextListener();
+		BaseServletContextListener scl2 = new BaseServletContextListener();
+		BaseServletContextListener scl3 = new BaseServletContextListener();
+
+		Dictionary<String, String> listenerProps = new Hashtable<String, String>();
+		listenerProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_LISTENER, "true");
+		registrations.add(getBundleContext().registerService(ServletContextListener.class, scl1, listenerProps));
+
+		listenerProps = new Hashtable<String, String>();
+		listenerProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_LISTENER, "true");
+		registrations.add(getBundleContext().registerService(ServletContextListener.class, scl2, listenerProps));
+
+		Dictionary<String, String> contextProps = new Hashtable<String, String>();
+		contextProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME, "a");
+		contextProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_PATH, "/a");
+		registrations.add(getBundleContext().registerService(ServletContextHelper.class, new ServletContextHelper(){}, contextProps));
+
+		listenerProps = new Hashtable<String, String>();
+		listenerProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_LISTENER, "true");
+		listenerProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_SELECT, "(" + HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME + "=a)");
+		registrations.add(getBundleContext().registerService(ServletContextListener.class, scl3, listenerProps));
+
+		ServletContext servletContext1 = scl1.servletContext;
+		ServletContext servletContext2 = scl2.servletContext;
+		ServletContext servletContext3 = scl3.servletContext;
+
+		Assert.assertNotNull(servletContext1);
+		Assert.assertNotNull(servletContext2);
+		Assert.assertNotNull(servletContext3);
+
+		Assert.assertTrue(servletContext1.equals(servletContext1));
+		Assert.assertTrue(servletContext2.equals(servletContext2));
+		Assert.assertTrue(servletContext3.equals(servletContext3));
+
+		Assert.assertTrue(servletContext1.equals(servletContext2));
+		Assert.assertFalse(servletContext1.equals(servletContext3));
+		Assert.assertFalse(servletContext2.equals(servletContext3));
+
+		// Asserts two invocations return the same value
+		Assert.assertEquals(servletContext1.hashCode(), servletContext1.hashCode());
+		Assert.assertEquals(servletContext2.hashCode(), servletContext2.hashCode());
+		Assert.assertEquals(servletContext3.hashCode(), servletContext3.hashCode());
+
+		Assert.assertEquals(servletContext1.hashCode(), servletContext2.hashCode());
+		Assert.assertNotEquals(servletContext1.hashCode(), servletContext3.hashCode());
+		Assert.assertNotEquals(servletContext2.hashCode(), servletContext3.hashCode());
+	}
+
+	@Test
 	public void test_Async1() throws Exception {
 
 		Servlet s1 = new BaseAsyncServlet("test_Listener8");
@@ -2648,10 +2962,11 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void test_WBServlet1() throws Exception {
 		String expected = "a";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("WBServlet1/a");
@@ -2661,10 +2976,11 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_WBServlet2() throws Exception {
 		String expected = "bab";
 		String actual;
-		Bundle bundle = installBundle(ServletTest.TEST_BUNDLE_1);
+		Bundle bundle = installBundle(TEST_BUNDLE_1);
 		try {
 			bundle.start();
 			actual = requestAdvisor.request("WBServlet2/a");
@@ -2674,6 +2990,7 @@ public class ServletTest extends TestCase {
 		Assert.assertEquals(expected, actual);
 	}
 
+	@Test
 	public void test_BufferedOutput() throws Exception {
 		Collection<ServiceRegistration<?>> registrations = new ArrayList<ServiceRegistration<?>>();
 		try {
@@ -2695,122 +3012,118 @@ public class ServletTest extends TestCase {
 		}
 	}
 
-	protected static final String PROTOTYPE = "prototype/";
-	protected static final String CONFIGURE = "configure";
-	protected static final String UNREGISTER = "unregister";
-	protected static final String ERROR = "error";
-	protected static final String STATUS_PARAM = "servlet.init.status";
-	protected static final String TEST_PROTOTYPE_NAME = "test.prototype.name";
-	protected static final String TEST_PATH_CUSTOMIZER_NAME = "test.path.customizer.name";
-	protected static final String TEST_ERROR_CODE = "test.error.code";
+	@Test
 	public void testWBServletChangeInitParams() throws Exception{
 			String actual;
 
 			Map<String, String> params = new HashMap<String, String>();
-			params.put(TEST_PROTOTYPE_NAME, getName());
-			params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, '/' + getName());
-			params.put(STATUS_PARAM, getName());
+			params.put(TEST_PROTOTYPE_NAME, testName.getMethodName());
+			params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, '/' + testName.getMethodName());
+			params.put(STATUS_PARAM, testName.getMethodName());
 			actual = doRequest(CONFIGURE, params);
-			Assert.assertEquals(getName(), actual);
-			actual = requestAdvisor.request(getName());
-			Assert.assertEquals(getName(), actual);
+			Assert.assertEquals(testName.getMethodName(), actual);
+			actual = requestAdvisor.request(testName.getMethodName());
+			Assert.assertEquals(testName.getMethodName(), actual);
 
 			// change the init param
 			params.put(STATUS_PARAM, "changed");
 			doRequest(CONFIGURE, params);
-			actual = requestAdvisor.request(getName());
+			actual = requestAdvisor.request(testName.getMethodName());
 			Assert.assertEquals("changed", actual);
 	}
 
+	@Test
 	public void testWBServletChangePattern() throws Exception{
 		String actual;
 
 		Map<String, String> params = new HashMap<String, String>();
-		params.put(TEST_PROTOTYPE_NAME, getName());
-		params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, '/' + getName());
-		params.put(STATUS_PARAM, getName());
+		params.put(TEST_PROTOTYPE_NAME, testName.getMethodName());
+		params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, '/' + testName.getMethodName());
+		params.put(STATUS_PARAM, testName.getMethodName());
 		actual = doRequest(CONFIGURE, params);
-		Assert.assertEquals(getName(), actual);
-		actual = requestAdvisor.request(getName());
-		Assert.assertEquals(getName(), actual);
+		Assert.assertEquals(testName.getMethodName(), actual);
+		actual = requestAdvisor.request(testName.getMethodName());
+		Assert.assertEquals(testName.getMethodName(), actual);
 
 		// change the pattern
 		params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, "/changed");
 		doRequest(CONFIGURE, params);
 		actual = requestAdvisor.request("changed");
-		Assert.assertEquals(getName(), actual);
+		Assert.assertEquals(testName.getMethodName(), actual);
 	}
 
+	@Test
 	public void testWBServletChangeRanking() throws Exception{
 		String actual;
 
 		// Configure two servlets with the second one registered ranking higher
 		Map<String, String> params1 = new HashMap<String, String>();
-		params1.put(TEST_PROTOTYPE_NAME, getName() + 1);
+		params1.put(TEST_PROTOTYPE_NAME, testName.getMethodName() + 1);
 		params1.put(Constants.SERVICE_RANKING, "1");
-		params1.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, '/' + getName());
-		params1.put(STATUS_PARAM, getName() + 1);
+		params1.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, '/' + testName.getMethodName());
+		params1.put(STATUS_PARAM, testName.getMethodName() + 1);
 		actual = doRequest(CONFIGURE, params1);
-		Assert.assertEquals(getName() + 1, actual);
+		Assert.assertEquals(testName.getMethodName() + 1, actual);
 
 		Map<String, String> params2 = new HashMap<String, String>();
-		params2.put(TEST_PROTOTYPE_NAME, getName() + 2);
+		params2.put(TEST_PROTOTYPE_NAME, testName.getMethodName() + 2);
 		params2.put(Constants.SERVICE_RANKING, "2");
-		params2.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, '/' + getName());
-		params2.put(STATUS_PARAM, getName() + 2);
+		params2.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, '/' + testName.getMethodName());
+		params2.put(STATUS_PARAM, testName.getMethodName() + 2);
 		actual = doRequest(CONFIGURE, params2);
-		Assert.assertEquals(getName() + 2, actual);
+		Assert.assertEquals(testName.getMethodName() + 2, actual);
 
 		// Confirm the second registered (higher ranked) gets used
-		actual = requestAdvisor.request(getName());
-		Assert.assertEquals(getName() + 2, actual);
+		actual = requestAdvisor.request(testName.getMethodName());
+		Assert.assertEquals(testName.getMethodName() + 2, actual);
 
 		// change the ranking to use the first servlet registered
 		params2.put(Constants.SERVICE_RANKING, "0");
 		doRequest(CONFIGURE, params2);
-		actual = requestAdvisor.request(getName());
-		Assert.assertEquals(getName() + 1, actual);
+		actual = requestAdvisor.request(testName.getMethodName());
+		Assert.assertEquals(testName.getMethodName() + 1, actual);
 
 		// Unregister the first servlet should cause the second servlet to be used
-		actual = doRequest(UNREGISTER, Collections.singletonMap(TEST_PROTOTYPE_NAME, getName() + 1));
-		Assert.assertEquals(getName() + 1, actual);
+		actual = doRequest(UNREGISTER, Collections.singletonMap(TEST_PROTOTYPE_NAME, testName.getMethodName() + 1));
+		Assert.assertEquals(testName.getMethodName() + 1, actual);
 
 		// Confirm the second registered is used
-		actual = requestAdvisor.request(getName());
-		Assert.assertEquals(getName() + 2, actual);
+		actual = requestAdvisor.request(testName.getMethodName());
+		Assert.assertEquals(testName.getMethodName() + 2, actual);
 	}
 
+	@Test
 	public void testWBServletDefaultContextAdaptor1() throws Exception{
 		Dictionary<String, String> helperProps = new Hashtable<String, String>();
-		helperProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME, "testContext" + getName());
+		helperProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME, "testContext" + testName.getMethodName());
 		helperProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_PATH, "/testContext");
-		helperProps.put(TEST_PATH_CUSTOMIZER_NAME, getName());
+		helperProps.put(TEST_PATH_CUSTOMIZER_NAME, testName.getMethodName());
 		ServiceRegistration<ServletContextHelper> helperReg = getBundleContext().registerService(ServletContextHelper.class, new TestServletContextHelperFactory(), helperProps);
 
 		ServiceRegistration<ContextPathCustomizer> pathAdaptorReg = null;
 		try {
 			Map<String, String> params = new HashMap<String, String>();
-			params.put(TEST_PROTOTYPE_NAME, getName());
-			params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, '/' + getName());
-			params.put(STATUS_PARAM, getName());
-			params.put("servlet.init." + TEST_PATH_CUSTOMIZER_NAME, getName());
+			params.put(TEST_PROTOTYPE_NAME, testName.getMethodName());
+			params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, '/' + testName.getMethodName());
+			params.put(STATUS_PARAM, testName.getMethodName());
+			params.put("servlet.init." + TEST_PATH_CUSTOMIZER_NAME, testName.getMethodName());
 			String actual = doRequest(CONFIGURE, params);
-			Assert.assertEquals(getName(), actual);
+			Assert.assertEquals(testName.getMethodName(), actual);
 
-			actual = requestAdvisor.request(getName());
-			Assert.assertEquals(getName(), actual);
+			actual = requestAdvisor.request(testName.getMethodName());
+			Assert.assertEquals(testName.getMethodName(), actual);
 
-			ContextPathCustomizer pathAdaptor = new TestContextPathAdaptor("(" + HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME + "=" + "testContext" + getName() + ")", null, getName());
+			ContextPathCustomizer pathAdaptor = new TestContextPathAdaptor("(" + HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME + "=" + "testContext" + testName.getMethodName() + ")", null, testName.getMethodName());
 			pathAdaptorReg = getBundleContext().registerService(ContextPathCustomizer.class, pathAdaptor, null);
 
-			actual = requestAdvisor.request("testContext/" + getName());
-			Assert.assertEquals(getName(), actual);
+			actual = requestAdvisor.request("testContext/" + testName.getMethodName());
+			Assert.assertEquals(testName.getMethodName(), actual);
 
 			pathAdaptorReg.unregister();
 			pathAdaptorReg = null;
 
-			actual = requestAdvisor.request(getName());
-			Assert.assertEquals(getName(), actual);
+			actual = requestAdvisor.request(testName.getMethodName());
+			Assert.assertEquals(testName.getMethodName(), actual);
 		} finally {
 			helperReg.unregister();
 			if (pathAdaptorReg != null) {
@@ -2819,38 +3132,39 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void testWBServletDefaultContextAdaptor2() throws Exception{
 		Dictionary<String, String> helperProps = new Hashtable<String, String>();
-		helperProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME, "testContext" + getName());
+		helperProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME, "testContext" + testName.getMethodName());
 		helperProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_PATH, "/testContext");
-		helperProps.put(TEST_PATH_CUSTOMIZER_NAME, getName());
+		helperProps.put(TEST_PATH_CUSTOMIZER_NAME, testName.getMethodName());
 		ServiceRegistration<ServletContextHelper> helperReg = getBundleContext().registerService(ServletContextHelper.class, new TestServletContextHelperFactory(), helperProps);
 
 		ServiceRegistration<ContextPathCustomizer> pathAdaptorReg = null;
 		try {
 			Map<String, String> params = new HashMap<String, String>();
-			params.put(TEST_PROTOTYPE_NAME, getName());
-			params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, '/' + getName());
-			params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_SELECT, "(" + HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME + "=" + "testContext" + getName() + ")");
-			params.put(STATUS_PARAM, getName());
-			params.put("servlet.init." + TEST_PATH_CUSTOMIZER_NAME, getName());
+			params.put(TEST_PROTOTYPE_NAME, testName.getMethodName());
+			params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, '/' + testName.getMethodName());
+			params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_SELECT, "(" + HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME + "=" + "testContext" + testName.getMethodName() + ")");
+			params.put(STATUS_PARAM, testName.getMethodName());
+			params.put("servlet.init." + TEST_PATH_CUSTOMIZER_NAME, testName.getMethodName());
 			String actual = doRequest(CONFIGURE, params);
-			Assert.assertEquals(getName(), actual);
+			Assert.assertEquals(testName.getMethodName(), actual);
 
-			actual = requestAdvisor.request("testContext/" + getName());
-			Assert.assertEquals(getName(), actual);
+			actual = requestAdvisor.request("testContext/" + testName.getMethodName());
+			Assert.assertEquals(testName.getMethodName(), actual);
 
-			ContextPathCustomizer pathAdaptor = new TestContextPathAdaptor(null, "testPrefix", getName());
+			ContextPathCustomizer pathAdaptor = new TestContextPathAdaptor(null, "testPrefix", testName.getMethodName());
 			pathAdaptorReg = getBundleContext().registerService(ContextPathCustomizer.class, pathAdaptor, null);
 
-			actual = requestAdvisor.request("testPrefix/testContext/" + getName());
-			Assert.assertEquals(getName(), actual);
+			actual = requestAdvisor.request("testPrefix/testContext/" + testName.getMethodName());
+			Assert.assertEquals(testName.getMethodName(), actual);
 
 			pathAdaptorReg.unregister();
 			pathAdaptorReg = null;
 
-			actual = requestAdvisor.request("testContext/" + getName());
-			Assert.assertEquals(getName(), actual);
+			actual = requestAdvisor.request("testContext/" + testName.getMethodName());
+			Assert.assertEquals(testName.getMethodName(), actual);
 		} finally {
 			helperReg.unregister();
 			if (pathAdaptorReg != null) {
@@ -2859,39 +3173,40 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void testWBServletDefaultContextAdaptor3() throws Exception{
 		// test the ContextPathCustomizer with a ServletContextHelper that has a '/' context path
 		Dictionary<String, String> helperProps = new Hashtable<String, String>();
-		helperProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME, "testContext" + getName());
+		helperProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME, "testContext" + testName.getMethodName());
 		helperProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_PATH, "/");
-		helperProps.put(TEST_PATH_CUSTOMIZER_NAME, getName());
+		helperProps.put(TEST_PATH_CUSTOMIZER_NAME, testName.getMethodName());
 		ServiceRegistration<ServletContextHelper> helperReg = getBundleContext().registerService(ServletContextHelper.class, new TestServletContextHelperFactory(), helperProps);
 
 		ServiceRegistration<ContextPathCustomizer> pathAdaptorReg = null;
 		try {
 			Map<String, String> params = new HashMap<String, String>();
-			params.put(TEST_PROTOTYPE_NAME, getName());
-			params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, '/' + getName());
-			params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_SELECT, "(" + HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME + "=" + "testContext" + getName() + ")");
-			params.put(STATUS_PARAM, getName());
-			params.put("servlet.init." + TEST_PATH_CUSTOMIZER_NAME, getName());
+			params.put(TEST_PROTOTYPE_NAME, testName.getMethodName());
+			params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN, '/' + testName.getMethodName());
+			params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_SELECT, "(" + HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME + "=" + "testContext" + testName.getMethodName() + ")");
+			params.put(STATUS_PARAM, testName.getMethodName());
+			params.put("servlet.init." + TEST_PATH_CUSTOMIZER_NAME, testName.getMethodName());
 			String actual = doRequest(CONFIGURE, params);
-			Assert.assertEquals(getName(), actual);
+			Assert.assertEquals(testName.getMethodName(), actual);
 
-			actual = requestAdvisor.request(getName());
-			Assert.assertEquals(getName(), actual);
+			actual = requestAdvisor.request(testName.getMethodName());
+			Assert.assertEquals(testName.getMethodName(), actual);
 
-			ContextPathCustomizer pathAdaptor = new TestContextPathAdaptor(null, "testPrefix", getName());
+			ContextPathCustomizer pathAdaptor = new TestContextPathAdaptor(null, "testPrefix", testName.getMethodName());
 			pathAdaptorReg = getBundleContext().registerService(ContextPathCustomizer.class, pathAdaptor, null);
 
-			actual = requestAdvisor.request("testPrefix/" + getName());
-			Assert.assertEquals(getName(), actual);
+			actual = requestAdvisor.request("testPrefix/" + testName.getMethodName());
+			Assert.assertEquals(testName.getMethodName(), actual);
 
 			pathAdaptorReg.unregister();
 			pathAdaptorReg = null;
 
-			actual = requestAdvisor.request(getName());
-			Assert.assertEquals(getName(), actual);
+			actual = requestAdvisor.request(testName.getMethodName());
+			Assert.assertEquals(testName.getMethodName(), actual);
 		} finally {
 			helperReg.unregister();
 			if (pathAdaptorReg != null) {
@@ -2900,191 +3215,47 @@ public class ServletTest extends TestCase {
 		}
 	}
 
-	private String doRequest(String action, Map<String, String> params) throws IOException {
-		return doRequestGetResponse(action, params).get("responseBody").get(0);
-	}
+	@Test
+	public void testHttpContextSetUser() throws ServletException, NamespaceException, IOException {
+		ExtendedHttpService extendedHttpService = (ExtendedHttpService)getHttpService();
 
-	private Map<String, List<String>> doRequestGetResponse(String action, Map<String, String> params) throws IOException {
-		StringBuilder requestInfo = new StringBuilder(PROTOTYPE);
-		requestInfo.append(action);
-		if (!params.isEmpty()) {
-			boolean firstParam = true;
-			for (Map.Entry<String, String> param : params.entrySet()) {
-				if (firstParam) {
-					requestInfo.append('?');
-					firstParam = false;
-				} else {
-					requestInfo.append('&');
-				}
-				requestInfo.append(param.getKey());
-				requestInfo.append('=');
-				requestInfo.append(param.getValue());
-			}
-		}
-		return requestAdvisor.request(requestInfo.toString(), null);
-	}
+		HttpContext testContext = new HttpContext() {
 
-	private BundleContext getBundleContext() {
-		return Activator.getBundleContext();
-	}
-
-	private String getContextPath() {
-		return getJettyProperty("context.path", "");
-	}
-
-	private HttpService getHttpService() {
-		ServiceReference<HttpService> serviceReference = getBundleContext().getServiceReference(HttpService.class);
-		return getBundleContext().getService(serviceReference);
-	}
-
-	private String getJettyProperty(String key, String defaultValue) {
-		String qualifiedKey = ServletTest.JETTY_PROPERTY_PREFIX + key;
-		String value = getProperty(qualifiedKey);
-		if (value == null) {
-			value = defaultValue;
-		}
-		return value;
-	}
-
-	private String getPort() {
-		String defaultPort = getProperty(ServletTest.OSGI_HTTP_PORT_PROPERTY);
-		if (defaultPort == null) {
-			defaultPort = "80";
-		}
-		return getJettyProperty("port", defaultPort);
-	}
-
-	private String getProperty(String key) {
-		BundleContext bundleContext = getBundleContext();
-		String value = bundleContext.getProperty(key);
-		return value;
-	}
-
-	private Bundle installBundle(String bundle) throws BundleException {
-		return installer.installBundle(bundle);
-	}
-
-	private void startBundles() throws BundleException {
-		for (String bundle : ServletTest.BUNDLES) {
-			advisor.startBundle(bundle);
-		}
-	}
-
-	private void startJetty() throws BundleException {
-		advisor.startBundle(ServletTest.EQUINOX_JETTY_BUNDLE);
-	}
-
-	private void stopBundles() throws BundleException {
-		for (int i = ServletTest.BUNDLES.length - 1; i >= 0; i--) {
-			String bundle = ServletTest.BUNDLES[i];
-			advisor.stopBundle(bundle);
-		}
-	}
-
-	private void stopJetty() throws BundleException {
-		advisor.stopBundle(ServletTest.EQUINOX_JETTY_BUNDLE);
-	}
-
-	private void uninstallBundle(Bundle bundle) throws BundleException {
-		installer.uninstallBundle(bundle);
-	}
-
-	protected static final String EQUINOX_DS_BUNDLE = "org.eclipse.equinox.ds";
-	protected static final String EQUINOX_JETTY_BUNDLE = "org.eclipse.equinox.http.jetty";
-	protected static final String JETTY_PROPERTY_PREFIX = "org.eclipse.equinox.http.jetty.";
-	protected static final String OSGI_HTTP_PORT_PROPERTY = "org.osgi.service.http.port";
-	protected static final String STATUS_OK = "OK";
-	protected static final String TEST_BUNDLES_BINARY_DIRECTORY = "/bundles_bin/";
-	protected static final String TEST_BUNDLE_1 = "tb1";
-
-	protected static final String[] BUNDLES = new String[] {
-		ServletTest.EQUINOX_DS_BUNDLE
-	};
-
-	private BundleInstaller installer;
-	private BundleAdvisor advisor;
-	private ServletRequestAdvisor requestAdvisor;
-	private final Collection<ServiceRegistration<? extends Object>> registrations = new ArrayList<ServiceRegistration<? extends Object>>();
-
-	static class TestServletContextHelperFactory implements ServiceFactory<ServletContextHelper> {
-		static class TestServletContextHelper extends ServletContextHelper {
-			public TestServletContextHelper(Bundle bundle) {
-				super(bundle);
-			}};
-		@Override
-		public ServletContextHelper getService(Bundle bundle, ServiceRegistration<ServletContextHelper> registration) {
-			return new TestServletContextHelper(bundle);
-		}
-
-		@Override
-		public void ungetService(Bundle bundle, ServiceRegistration<ServletContextHelper> registration,
-				ServletContextHelper service) {
-			// nothing
-		}
-
-	}
-
-	static class TestContextPathAdaptor extends ContextPathCustomizer {
-		private final String defaultFilter;
-		private final String contextPrefix;
-		private final String testName;
-
-		/**
-		 * @param defaultFilter
-		 * @param contextPrefix
-		 */
-		public TestContextPathAdaptor(String defaultFilter, String contextPrefix, String testName) {
-			super();
-			this.defaultFilter = defaultFilter;
-			this.contextPrefix = contextPrefix;
-			this.testName = testName;
-		}
-
-		@Override
-		public String getDefaultContextSelectFilter(ServiceReference<?> httpWhiteBoardService) {
-			if (testName.equals(httpWhiteBoardService.getProperty("servlet.init." + TEST_PATH_CUSTOMIZER_NAME))) {
-				return defaultFilter;
-			}
-			return null;
-		}
-
-		@Override
-		public String getContextPathPrefix(ServiceReference<ServletContextHelper> helper) {
-			if (testName.equals(helper.getProperty(TEST_PATH_CUSTOMIZER_NAME))) {
-				return contextPrefix;
-			}
-			return null;
-		}
-
-	}
-
-	static class ErrorServlet extends HttpServlet{
-		private static final long serialVersionUID = 1L;
-		private final String errorCode;
-
-		public ErrorServlet(String errorCode) {
-			super();
-			this.errorCode = errorCode;
-		}
-
-		@Override
-		protected void service(
-				HttpServletRequest request, HttpServletResponse response)
-			throws ServletException ,IOException {
-
-			if (response.isCommitted()) {
-				System.out.println("Problem?");
-
-				return;
+			@Override
+			public boolean handleSecurity(HttpServletRequest request, HttpServletResponse response) throws IOException {
+				request.setAttribute(HttpContext.REMOTE_USER, "TEST");
+				request.setAttribute(HttpContext.AUTHENTICATION_TYPE, "Basic");
+				return true;
 			}
 
-			PrintWriter writer = response.getWriter();
+			@Override
+			public URL getResource(String name) {
+				return null;
+			}
 
-			String requestURI = (String)request.getAttribute(RequestDispatcher.ERROR_REQUEST_URI);
-			Integer status = (Integer)request.getAttribute(RequestDispatcher.ERROR_STATUS_CODE);
+			@Override
+			public String getMimeType(String name) {
+				return null;
+			}
+		};
+		HttpServlet testServlet = new HttpServlet() {
+			private static final long serialVersionUID = 1L;
 
-			writer.print(errorCode + " : " + status + " : ERROR : " + requestURI);
-		}
+			@Override
+			protected void doGet(HttpServletRequest req, HttpServletResponse resp)
+					throws ServletException, IOException {
+				resp.setContentType("text/html");
+				PrintWriter out = resp.getWriter();
+				out.print("USER: " + req.getRemoteUser() + " AUTH_TYPE: " + req.getAuthType());
+			}
 
-	};
+		};
+		extendedHttpService.registerServlet("/" + testName.getMethodName(), testServlet, null, testContext);
+
+		String expected = "USER: TEST AUTH_TYPE: Basic";
+		String actual = requestAdvisor.request(testName.getMethodName());
+		Assert.assertEquals(expected, actual);
+	}
+
+
 }

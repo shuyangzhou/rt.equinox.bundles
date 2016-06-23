@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2004, 2011 IBM Corporation and others.
+ * Copyright (c) 2004, 2016 IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -10,37 +10,47 @@
  *******************************************************************************/
 package org.eclipse.core.runtime;
 
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+
 /**
  * This class is a thread safe list that is designed for storing lists of listeners.
  * The implementation is optimized for minimal memory footprint, frequent reads 
  * and infrequent writes.  Modification of the list is synchronized and relatively
- * expensive, while accessing the listeners is very fast.  Readers are given access 
+ * expensive, while accessing the listeners is very fast.  For legacy code, readers are given access 
  * to the underlying array data structure for reading, with the trust that they will 
  * not modify the underlying array.
  * <p>
- * <a name="same">A listener list handles the <i>same</i> listener being added 
+ * <a name="same"></a>A listener list handles the <i>same</i> listener being added 
  * multiple times, and tolerates removal of listeners that are the same as other
  * listeners in the list.  For this purpose, listeners can be compared with each other 
  * using either equality or identity, as specified in the list constructor.
  * </p>
  * <p>
- * Use the <code>getListeners</code> method when notifying listeners. The recommended
+ * Use an enhanced 'for' loop to notify listeners. The recommended
  * code sequence for notifying all registered listeners of say,
- * <code>FooListener.eventHappened</code>, is:
- * 
+ * <code>FooListener#eventHappened(Event)</code>, is:
+ * </p>
  * <pre>
- * Object[] listeners = myListenerList.getListeners();
- * for (int i = 0; i &lt; listeners.length; ++i) {
- * 	((FooListener) listeners[i]).eventHappened(event);
- * }
+ListenerList&lt;FooListener&gt; fooListeners = new ListenerList<>();
+//...
+for (FooListener listener : fooListeners) {
+	listener.eventHappened(event);
+}
  * </pre>
- * 
- * </p><p>
+ * <p>
+ * Legacy code may still call {@link #getListeners()} and then use a 'for' loop
+ * to iterate the {@code Object[]}. This might be insignificantly faster, but
+ * it lacks type-safety and risks inadvertent modifications to the array.
+ * </p>
+ * <p>
  * This class can be used without OSGi running.
  * </p>
+ * 
+ * @param <E> the type of listeners in this list
  * @since org.eclipse.equinox.common 3.2
  */
-public class ListenerList {
+public class ListenerList<E> implements Iterable<E> {
 
 	/**
 	 * The empty array singleton instance.
@@ -96,7 +106,7 @@ public class ListenerList {
 	 * 
 	 * @param listener the non-<code>null</code> listener to add
 	 */
-	public synchronized void add(Object listener) {
+	public synchronized void add(E listener) {
 		// This method is synchronized to protect against multiple threads adding 
 		// or removing listeners concurrently. This does not block concurrent readers.
 		if (listener == null)
@@ -124,12 +134,62 @@ public class ListenerList {
 	 * to the listener list during the notification will have no effect on 
 	 * the notification itself.
 	 * <p>
-	 * Note: Callers of this method <b>must not</b> modify the returned array. 
+	 * Note: Callers of this method <b>must not</b> modify the returned array.
+	 * </p>
+	 * <p>
+	 * Note: The recommended and type-safe way to iterate this list is to use
+	 * an enhanced 'for' statement, see {@link ListenerList}.
+	 * This method is deprecated for new code.
+	 * </p>
 	 *
 	 * @return the list of registered listeners
 	 */
 	public Object[] getListeners() {
 		return listeners;
+	}
+
+	/**
+	 * Returns an iterator over all the registered listeners.
+	 * The resulting iterator is unaffected by subsequent adds or removes.
+	 * Use this method when notifying listeners, so that any modifications
+	 * to the listener list during the notification will have no effect on 
+	 * the notification itself.
+	 * 
+	 * @return an iterator
+	 * @since org.eclipse.equinox.common 3.8
+	 */
+	@Override
+	public Iterator<E> iterator() {
+		return new ListenerListIterator<>(listeners);
+	}
+
+	private static class ListenerListIterator<E> implements Iterator<E> {
+		private Object[] listeners;
+		private int i;
+
+		public ListenerListIterator(Object[] listeners) {
+			this.listeners = listeners;
+		}
+
+		@Override
+		public boolean hasNext() {
+			return i < listeners.length;
+		}
+
+		@Override
+		public E next() {
+			if (i >= listeners.length) {
+				throw new NoSuchElementException();
+			}
+			@SuppressWarnings("unchecked") // (E) is safe, because #add(E) only accepts Es
+			E next = (E) listeners[i++];
+			return next;
+		}
+
+		@Override
+		public void remove() {
+			throw new UnsupportedOperationException();
+		}
 	}
 
 	/**

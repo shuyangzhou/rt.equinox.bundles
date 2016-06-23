@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2015 Raymond Augé and others.
+ * Copyright (c) 2016 Raymond Augé and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -23,6 +23,7 @@ import javax.servlet.Filter;
 import javax.servlet.http.*;
 import org.eclipse.equinox.http.servlet.internal.HttpServiceRuntimeImpl;
 import org.eclipse.equinox.http.servlet.internal.customizer.*;
+import org.eclipse.equinox.http.servlet.internal.dto.ExtendedServletDTO;
 import org.eclipse.equinox.http.servlet.internal.error.*;
 import org.eclipse.equinox.http.servlet.internal.registration.*;
 import org.eclipse.equinox.http.servlet.internal.registration.FilterRegistration;
@@ -141,7 +142,7 @@ public class ContextController {
 		this.trackingContext = trackingContextParam;
 		this.consumingContext = consumingContext;
 
-		this.string = getClass().getSimpleName() + '[' + contextName + ", " + consumingContext.getBundle() + ']'; //$NON-NLS-1$
+		this.string = getClass().getSimpleName() + '[' + serviceId + "][" + contextName + ", " + consumingContext.getBundle() + ']'; //$NON-NLS-1$
 
 		listenerServiceTracker = new ServiceTracker<EventListener, AtomicReference<ListenerRegistration>>(
 			trackingContext, httpServiceRuntime.getListenerFilter(),
@@ -477,14 +478,28 @@ public class ContextController {
 			// this is a legacy registration; use a negative id for the DTO
 			serviceId = -serviceId;
 		}
-		String servletName = ServiceProperties.parseName(
+		String servletNameFromProperties = (String)servletRef.getProperty(
+			HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_NAME);
+		String generatedServletName = ServiceProperties.parseName(
 			servletRef.getProperty(
 				HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_NAME), servletHolder.get());
+		boolean multipartSupported = ServiceProperties.parseBoolean(
+			servletRef,	Const.EQUINOX_HTTP_MULTIPARTSUPPORTED);
 
 		if (((patterns == null) || (patterns.length == 0)) &&
-			((errorPages == null) || errorPages.length == 0)) {
-			throw new IllegalArgumentException(
-				"Either patterns or errorPages must contain a value.");
+			((errorPages == null) || errorPages.length == 0) &&
+			(servletNameFromProperties == null)) {
+
+			StringBuilder sb = new StringBuilder();
+			sb.append("One of the service properties "); //$NON-NLS-1$
+			sb.append(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_ERROR_PAGE);
+			sb.append(", "); //$NON-NLS-1$
+			sb.append(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_NAME);
+			sb.append(", "); //$NON-NLS-1$
+			sb.append(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN);
+			sb.append(" must contain a value."); //$NON-NLS-1$
+
+			throw new IllegalArgumentException(sb.toString());
 		}
 
 		if (patterns != null) {
@@ -493,11 +508,12 @@ public class ContextController {
 			}
 		}
 
-		ServletDTO servletDTO = new ServletDTO();
+		ExtendedServletDTO servletDTO = new ExtendedServletDTO();
 
 		servletDTO.asyncSupported = asyncSupported;
 		servletDTO.initParams = servletInitParams;
-		servletDTO.name = servletName;
+		servletDTO.multipartSupported = multipartSupported;
+		servletDTO.name = generatedServletName;
 		servletDTO.patterns = sort(patterns);
 		servletDTO.serviceId = serviceId;
 		servletDTO.servletContextId = contextServiceId;
@@ -543,7 +559,7 @@ public class ContextController {
 			errorPageDTO.errorCodes = errorCodes;
 			errorPageDTO.exceptions = exceptions.toArray(new String[exceptions.size()]);
 			errorPageDTO.initParams = servletInitParams;
-			errorPageDTO.name = servletName;
+			errorPageDTO.name = generatedServletName;
 			errorPageDTO.serviceId = serviceId;
 			errorPageDTO.servletContextId = contextServiceId;
 			errorPageDTO.servletInfo = servletHolder.get().getServletInfo();
@@ -558,7 +574,7 @@ public class ContextController {
 			servletHolder, servletDTO, errorPageDTO, curServletContextHelper, this,
 			legacyTCCL);
 		ServletConfig servletConfig = new ServletConfigImpl(
-			servletName, servletInitParams, servletContext);
+			generatedServletName, servletInitParams, servletContext);
 
 		servletRegistration.init(servletConfig);
 

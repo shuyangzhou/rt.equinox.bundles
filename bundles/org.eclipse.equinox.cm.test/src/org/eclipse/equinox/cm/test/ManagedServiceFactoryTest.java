@@ -10,40 +10,41 @@
  *******************************************************************************/
 package org.eclipse.equinox.cm.test;
 
+import static org.junit.Assert.*;
+
 import java.util.Dictionary;
-import java.util.Properties;
-import junit.framework.TestCase;
+import java.util.Hashtable;
+import org.junit.*;
 import org.osgi.framework.*;
 import org.osgi.service.cm.*;
 
-public class ManagedServiceFactoryTest extends TestCase {
+public class ManagedServiceFactoryTest {
 
 	private ConfigurationAdmin cm;
-	private ServiceReference reference;
+	private ServiceReference<ConfigurationAdmin> reference;
 	int updateCount = 0;
 	boolean locked = false;
 	Object lock = new Object();
 
-	public ManagedServiceFactoryTest(String name) {
-		super(name);
-	}
-
-	protected void setUp() throws Exception {
+	@Before
+	public void setUp() throws Exception {
 		Activator.getBundle("org.eclipse.equinox.cm").start();
-		reference = Activator.getBundleContext().getServiceReference(ConfigurationAdmin.class.getName());
-		cm = (ConfigurationAdmin) Activator.getBundleContext().getService(reference);
+		reference = Activator.getBundleContext().getServiceReference(ConfigurationAdmin.class);
+		cm = Activator.getBundleContext().getService(reference);
 
 	}
 
-	protected void tearDown() throws Exception {
+	@After
+	public void tearDown() throws Exception {
 		Activator.getBundleContext().ungetService(reference);
 		Activator.getBundle("org.eclipse.equinox.cm").stop();
 	}
 
+	@Test
 	public void testSamePidManagedServiceFactory() throws Exception {
 
 		Configuration config = cm.createFactoryConfiguration("test");
-		Properties props = new Properties();
+		Dictionary<String, Object> props = new Hashtable<String, Object>();
 		props.put("testkey", "testvalue");
 		config.update(props);
 
@@ -62,7 +63,7 @@ public class ManagedServiceFactoryTest extends TestCase {
 				return null;
 			}
 
-			public void updated(String pid, Dictionary properties) throws ConfigurationException {
+			public void updated(String pid, Dictionary<String, ?> properties) {
 				synchronized (lock) {
 					locked = false;
 					lock.notify();
@@ -71,11 +72,11 @@ public class ManagedServiceFactoryTest extends TestCase {
 			}
 		};
 
-		Dictionary dict = new Properties();
+		Dictionary<String, Object> dict = new Hashtable<String, Object>();
 		dict.put(Constants.SERVICE_PID, "test");
-		ServiceRegistration reg = null;
+		ServiceRegistration<ManagedServiceFactory> reg = null;
 		synchronized (lock) {
-			reg = Activator.getBundleContext().registerService(ManagedServiceFactory.class.getName(), msf, dict);
+			reg = Activator.getBundleContext().registerService(ManagedServiceFactory.class, msf, dict);
 			locked = true;
 			lock.wait(5000);
 			if (locked)
@@ -83,9 +84,9 @@ public class ManagedServiceFactoryTest extends TestCase {
 			assertEquals(1, updateCount);
 		}
 
-		ServiceRegistration reg2 = null;
+		ServiceRegistration<ManagedServiceFactory> reg2 = null;
 		synchronized (lock) {
-			reg2 = Activator.getBundleContext().registerService(ManagedServiceFactory.class.getName(), msf, dict);
+			reg2 = Activator.getBundleContext().registerService(ManagedServiceFactory.class, msf, dict);
 			locked = true;
 			lock.wait(5000);
 			if (locked)
@@ -97,6 +98,7 @@ public class ManagedServiceFactoryTest extends TestCase {
 		config.delete();
 	}
 
+	@Test
 	public void testGeneralManagedServiceFactory() throws Exception {
 		updateCount = 0;
 		ManagedServiceFactory msf = new ManagedServiceFactory() {
@@ -113,7 +115,7 @@ public class ManagedServiceFactoryTest extends TestCase {
 				return null;
 			}
 
-			public void updated(String pid, Dictionary properties) throws ConfigurationException {
+			public void updated(String pid, Dictionary<String, ?> properties) {
 				synchronized (lock) {
 					locked = false;
 					lock.notify();
@@ -122,12 +124,12 @@ public class ManagedServiceFactoryTest extends TestCase {
 			}
 		};
 
-		Dictionary dict = new Properties();
+		Dictionary<String, Object> dict = new Hashtable<String, Object>();
 		dict.put(Constants.SERVICE_PID, "test");
 
-		ServiceRegistration reg = null;
+		ServiceRegistration<ManagedServiceFactory> reg = null;
 		synchronized (lock) {
-			reg = Activator.getBundleContext().registerService(ManagedServiceFactory.class.getName(), msf, dict);
+			reg = Activator.getBundleContext().registerService(ManagedServiceFactory.class, msf, dict);
 			locked = true;
 			lock.wait(100);
 			assertTrue(locked);
@@ -137,7 +139,7 @@ public class ManagedServiceFactoryTest extends TestCase {
 
 		Configuration config = cm.createFactoryConfiguration("test");
 		assertNull(config.getProperties());
-		Properties props = new Properties();
+		Dictionary<String, Object> props = new Hashtable<String, Object>();
 		props.put("testkey", "testvalue");
 
 		synchronized (lock) {

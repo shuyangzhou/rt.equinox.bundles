@@ -1,12 +1,12 @@
 /*******************************************************************************
- * Copyright (c) 2014, 2015 Raymond Augé and others.
+ * Copyright (c) 2014, 2016 Raymond Augé and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
  * http://www.eclipse.org/legal/epl-v10.html
  *
  * Contributors:
- *     Raymond Augé <raymond.auge@liferay.com> - Bug 436698
+ *     Raymond Augé - bug fixes and enhancements
  ******************************************************************************/
 
 package org.eclipse.equinox.http.servlet.internal;
@@ -19,7 +19,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.servlet.*;
 import javax.servlet.Filter;
-import javax.servlet.http.*;
+import javax.servlet.http.HttpSessionAttributeListener;
+import javax.servlet.http.HttpSessionListener;
 import org.eclipse.equinox.http.servlet.context.ContextPathCustomizer;
 import org.eclipse.equinox.http.servlet.internal.context.*;
 import org.eclipse.equinox.http.servlet.internal.error.*;
@@ -359,21 +360,7 @@ public class HttpServiceRuntimeImpl
 		return legacyIdGenerator.getAndIncrement();
 	}
 
-	public boolean doDispatch(
-			HttpServletRequest request, HttpServletResponse response, String path)
-		throws IOException, ServletException {
-
-		DispatchTargets dispatchTargets = getDispatchTargets(path, null);
-
-		if (dispatchTargets == null) {
-			return false;
-		}
-
-		return dispatchTargets.doDispatch(
-			request, response, path, request.getDispatcherType());
-	}
-
-	private DispatchTargets getDispatchTargets(
+	public DispatchTargets getDispatchTargets(
 		String requestURI, String extension, String queryString, Match match,
 		RequestInfoDTO requestInfoDTO) {
 
@@ -897,6 +884,8 @@ public class HttpServiceRuntimeImpl
 		sb.append(Servlet.class.getName());
 		sb.append(")(|("); //$NON-NLS-1$
 		sb.append(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_ERROR_PAGE);
+		sb.append("=*)("); //$NON-NLS-1$
+		sb.append(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_NAME);
 		sb.append("=*)("); //$NON-NLS-1$
 		sb.append(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN);
 		sb.append("=*)))"); //$NON-NLS-1$

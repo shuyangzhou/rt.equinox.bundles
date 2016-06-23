@@ -10,49 +10,50 @@
  *******************************************************************************/
 package org.eclipse.equinox.cm.test;
 
+import static org.junit.Assert.*;
+
 import java.util.Dictionary;
-import java.util.Properties;
-import junit.framework.TestCase;
+import java.util.Hashtable;
 import org.eclipse.equinox.log.ExtendedLogReaderService;
 import org.eclipse.equinox.log.LogFilter;
+import org.junit.*;
 import org.osgi.framework.*;
 import org.osgi.service.cm.*;
 import org.osgi.service.log.*;
 
-public class ManagedServiceTest extends TestCase {
+public class ManagedServiceTest {
 
 	private ConfigurationAdmin cm;
-	private ServiceReference reference;
+	private ServiceReference<ConfigurationAdmin> reference;
 	int updateCount = 0;
 	boolean locked = false;
 	Object lock = new Object();
 
-	public ManagedServiceTest(String name) {
-		super(name);
-	}
-
-	protected void setUp() throws Exception {
+	@Before
+	public void setUp() throws Exception {
 		Activator.getBundle("org.eclipse.equinox.cm").start();
-		reference = Activator.getBundleContext().getServiceReference(ConfigurationAdmin.class.getName());
-		cm = (ConfigurationAdmin) Activator.getBundleContext().getService(reference);
+		reference = Activator.getBundleContext().getServiceReference(ConfigurationAdmin.class);
+		cm = Activator.getBundleContext().getService(reference);
 	}
 
-	protected void tearDown() throws Exception {
+	@After
+	public void tearDown() throws Exception {
 		Activator.getBundleContext().ungetService(reference);
 		Activator.getBundle("org.eclipse.equinox.cm").stop();
 	}
 
+	@Test
 	public void testSamePidManagedService() throws Exception {
 
 		Configuration config = cm.getConfiguration("test");
-		Properties props = new Properties();
+		Dictionary<String, Object> props = new Hashtable<String, Object>();
 		props.put("testkey", "testvalue");
 		config.update(props);
 
 		updateCount = 0;
 		ManagedService ms = new ManagedService() {
 
-			public void updated(Dictionary properties) throws ConfigurationException {
+			public void updated(Dictionary<String, ?> properties) {
 				synchronized (lock) {
 					locked = false;
 					lock.notify();
@@ -62,11 +63,11 @@ public class ManagedServiceTest extends TestCase {
 			}
 		};
 
-		Dictionary dict = new Properties();
+		Dictionary<String, Object> dict = new Hashtable<String, Object>();
 		dict.put(Constants.SERVICE_PID, "test");
-		ServiceRegistration reg = null;
+		ServiceRegistration<ManagedService> reg = null;
 		synchronized (lock) {
-			reg = Activator.getBundleContext().registerService(ManagedService.class.getName(), ms, dict);
+			reg = Activator.getBundleContext().registerService(ManagedService.class, ms, dict);
 			locked = true;
 			lock.wait(5000);
 			if (locked)
@@ -74,9 +75,9 @@ public class ManagedServiceTest extends TestCase {
 			assertEquals(1, updateCount);
 		}
 
-		ServiceRegistration reg2 = null;
+		ServiceRegistration<ManagedService> reg2 = null;
 		synchronized (lock) {
-			reg2 = Activator.getBundleContext().registerService(ManagedService.class.getName(), ms, dict);
+			reg2 = Activator.getBundleContext().registerService(ManagedService.class, ms, dict);
 			locked = true;
 			lock.wait(5000);
 			if (locked)
@@ -88,16 +89,17 @@ public class ManagedServiceTest extends TestCase {
 		config.delete();
 	}
 
+	@Test
 	public void testBug374637() throws Exception {
 
 		ManagedService ms = new ManagedService() {
 
-			public void updated(Dictionary properties) throws ConfigurationException {
+			public void updated(Dictionary<String, ?> properties) {
 				// nothing
 			}
 		};
 
-		ExtendedLogReaderService reader = (ExtendedLogReaderService) Activator.getBundleContext().getService(Activator.getBundleContext().getServiceReference(ExtendedLogReaderService.class));
+		ExtendedLogReaderService reader = Activator.getBundleContext().getService(Activator.getBundleContext().getServiceReference(ExtendedLogReaderService.class));
 		synchronized (lock) {
 			locked = false;
 		}
@@ -114,10 +116,10 @@ public class ManagedServiceTest extends TestCase {
 				return logLevel == LogService.LOG_ERROR;
 			}
 		});
-		Dictionary dict = new Properties();
+		Dictionary<String, Object> dict = new Hashtable<String, Object>();
 		dict.put(Constants.SERVICE_PID, "test");
-		ServiceRegistration reg1 = Activator.getBundleContext().registerService(ManagedService.class.getName(), ms, dict);
-		ServiceRegistration reg2 = Activator.getBundleContext().registerService(ManagedService.class.getName(), ms, dict);
+		ServiceRegistration<ManagedService> reg1 = Activator.getBundleContext().registerService(ManagedService.class, ms, dict);
+		ServiceRegistration<ManagedService> reg2 = Activator.getBundleContext().registerService(ManagedService.class, ms, dict);
 
 		reg1.unregister();
 		reg2.unregister();
@@ -129,11 +131,12 @@ public class ManagedServiceTest extends TestCase {
 		}
 	}
 
+	@Test
 	public void testGeneralManagedService() throws Exception {
 		updateCount = 0;
 		ManagedService ms = new ManagedService() {
 
-			public void updated(Dictionary properties) throws ConfigurationException {
+			public void updated(Dictionary<String, ?> properties) {
 				synchronized (lock) {
 					locked = false;
 					lock.notify();
@@ -143,12 +146,12 @@ public class ManagedServiceTest extends TestCase {
 			}
 		};
 
-		Dictionary dict = new Properties();
+		Dictionary<String, Object> dict = new Hashtable<String, Object>();
 		dict.put(Constants.SERVICE_PID, "test");
 
-		ServiceRegistration reg = null;
+		ServiceRegistration<ManagedService> reg = null;
 		synchronized (lock) {
-			reg = Activator.getBundleContext().registerService(ManagedService.class.getName(), ms, dict);
+			reg = Activator.getBundleContext().registerService(ManagedService.class, ms, dict);
 			locked = true;
 			lock.wait(5000);
 			if (locked)
@@ -158,7 +161,7 @@ public class ManagedServiceTest extends TestCase {
 
 		Configuration config = cm.getConfiguration("test");
 		assertNull(config.getProperties());
-		Properties props = new Properties();
+		Dictionary<String, Object> props = new Hashtable<String, Object>();
 		props.put("testkey", "testvalue");
 
 		synchronized (lock) {

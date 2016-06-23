@@ -11,11 +11,14 @@
 
 package org.eclipse.equinox.bidi.internal.tests;
 
+import static org.junit.Assert.assertEquals;
+
 import java.util.Locale;
 import org.eclipse.equinox.bidi.StructuredTextProcessor;
 import org.eclipse.equinox.bidi.StructuredTextTypeHandlerFactory;
 import org.eclipse.equinox.bidi.advanced.IStructuredTextExpert;
 import org.eclipse.equinox.bidi.advanced.StructuredTextExpertFactory;
+import org.junit.*;
 
 /**
  * Tests methods in BidiComplexUtil
@@ -35,19 +38,21 @@ public class StructuredTextProcessorTest extends StructuredTextTestBase {
 
 	private Locale locale;
 
-	protected void setUp() throws Exception {
-		super.setUp();
+	@Before
+	public void setUp() throws Exception {
 		locale = Locale.getDefault();
 	}
 
-	protected void tearDown() {
+	@After
+	public void tearDown() {
 		Locale.setDefault(locale);
 	}
 
 	private void doTest1(String data, String result) {
 		Locale.setDefault(Locale.ENGLISH);
 		String full = StructuredTextProcessor.process(toUT16(data));
-		assertEquals("Util #1 full EN - ", data, toPseudo(full));
+		// Since https://bugs.eclipse.org/467836 , processing also works in non-bidi locales:
+		assertEquals("Util #1 full EN - ", result, toPseudo(full));
 		Locale.setDefault(new Locale(HEBREW2));
 		full = StructuredTextProcessor.process(toUT16(data));
 		assertEquals("Util #1 full HE - ", result, toPseudo(full));
@@ -99,6 +104,7 @@ public class StructuredTextProcessorTest extends StructuredTextTestBase {
 		assertEquals(txt, result, toPseudo(full));
 	}
 
+	@Test
 	public void testStructuredTextProcessor() {
 		// Test process() and deprocess() with default delimiters
 		doTest1("ABC/DEF/G", ">@ABC@/DEF@/G@^");
