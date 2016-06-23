@@ -43,8 +43,13 @@ public class HttpSessionAdaptor implements HttpSession, Serializable {
 				innerSessionsToInvalidate = new HashSet<HttpSessionAdaptor>(innerSessions);
 				innerSessions.clear();
 			}
+
+			HttpSession httpSession = event.getSession();
+
 			for (HttpSessionAdaptor innerSession : innerSessionsToInvalidate) {
-				innerSession.invalidate();
+				if (!httpSession.equals(innerSession.getSession())) {
+					innerSession.invalidate();
+				}
 			}
 		}
 
