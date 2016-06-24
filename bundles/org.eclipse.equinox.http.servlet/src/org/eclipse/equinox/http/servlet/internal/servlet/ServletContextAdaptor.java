@@ -385,7 +385,11 @@ public class ServletContextAdaptor {
 	}
 
 	Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-		servletContextTL.set((ServletContext)proxy);
+		if ("removeAttribute".equals(method.getName()) ||
+			"setAttribute".equals(method.getName())) {
+
+			servletContextTL.set((ServletContext)proxy);
+		}
 
 		try {
 			Method m = contextToHandlerMethods.get(method);
