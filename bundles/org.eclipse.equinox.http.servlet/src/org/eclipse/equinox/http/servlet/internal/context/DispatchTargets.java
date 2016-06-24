@@ -11,8 +11,7 @@
 
 package org.eclipse.equinox.http.servlet.internal.context;
 
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
+import java.io.*;
 import java.net.URLDecoder;
 import java.util.*;
 import javax.servlet.*;
@@ -31,69 +30,91 @@ public class DispatchTargets {
 
 	public DispatchTargets(
 		ContextController contextController,
-		EndpointRegistration<?> endpointRegistration,
+		EndpointRegistration<?> endpointRegistration, String servletName,
 		String requestURI, String servletPath, String pathInfo, String queryString) {
 
 		this(
 			contextController, endpointRegistration,
-			Collections.<FilterRegistration>emptyList(), requestURI, servletPath, pathInfo,
-			queryString);
+			Collections.<FilterRegistration>emptyList(), servletName, requestURI,
+			servletPath, pathInfo, queryString);
 	}
 
 	public DispatchTargets(
 		ContextController contextController,
 		EndpointRegistration<?> endpointRegistration,
-		List<FilterRegistration> matchingFilterRegistrations,
+		List<FilterRegistration> matchingFilterRegistrations, String servletName,
 		String requestURI, String servletPath, String pathInfo, String queryString) {
 
 		this.contextController = contextController;
 		this.endpointRegistration = endpointRegistration;
 		this.matchingFilterRegistrations = matchingFilterRegistrations;
+		this.servletName = servletName;
 		this.requestURI = requestURI;
-		this.servletPath = servletPath;
+		this.servletPath = (servletPath == null) ? Const.BLANK : servletPath;
 		this.pathInfo = pathInfo;
-		this.parameterMap = queryStringToParameterMap(queryString);
 		this.queryString = queryString;
+
+		this.string = SIMPLE_NAME + '[' + contextController.getFullContextPath() + requestURI + (queryString != null ? '?' + queryString : "") + ", " + endpointRegistration.toString() + ']'; //$NON-NLS-1$
+	}
+
+	public void addRequestParameters(HttpServletRequest request) {
+		if (queryString == null) {
+			parameterMap = request.getParameterMap();
+			queryString = request.getQueryString();
+
+			return;
+		}
+
+		Map<String, String[]> parameterMapCopy = queryStringToParameterMap(queryString);
+
+		for (Map.Entry<String, String[]> entry : request.getParameterMap().entrySet()) {
+			String[] values = parameterMapCopy.get(entry.getKey());
+			values = Params.append(values, entry.getValue());
+			parameterMapCopy.put(entry.getKey(), values);
+		}
+
+		parameterMap = Collections.unmodifiableMap(parameterMapCopy);
 	}
 
 	public boolean doDispatch(
-			HttpServletRequest request, HttpServletResponse response,
-			String path, DispatcherType dispatcherType)
+			HttpServletRequest originalRequest, HttpServletResponse response,
+			String path, DispatcherType requestedDispatcherType)
 		throws ServletException, IOException {
 
+		setDispatcherType(requestedDispatcherType);
+
+		RequestAttributeSetter setter = new RequestAttributeSetter(originalRequest);
+
 		if (dispatcherType == DispatcherType.INCLUDE) {
-			request.setAttribute(RequestDispatcher.INCLUDE_CONTEXT_PATH, contextController.getContextPath());
-			request.setAttribute(RequestDispatcher.INCLUDE_PATH_INFO, getPathInfo());
-			request.setAttribute(RequestDispatcher.INCLUDE_QUERY_STRING, getQueryString());
-			request.setAttribute(RequestDispatcher.INCLUDE_REQUEST_URI, getRequestURI());
-			request.setAttribute(RequestDispatcher.INCLUDE_SERVLET_PATH, getServletPath());
+			setter.setAttribute(RequestDispatcher.INCLUDE_CONTEXT_PATH, contextController.getContextPath());
+			setter.setAttribute(RequestDispatcher.INCLUDE_PATH_INFO, getPathInfo());
+			setter.setAttribute(RequestDispatcher.INCLUDE_QUERY_STRING, getQueryString());
+			setter.setAttribute(RequestDispatcher.INCLUDE_REQUEST_URI, getRequestURI());
+			setter.setAttribute(RequestDispatcher.INCLUDE_SERVLET_PATH, getServletPath());
 		}
 		else if (dispatcherType == DispatcherType.FORWARD) {
 			response.resetBuffer();
 
-			request.setAttribute(RequestDispatcher.FORWARD_CONTEXT_PATH, request.getContextPath());
-			request.setAttribute(RequestDispatcher.FORWARD_PATH_INFO, request.getPathInfo());
-			request.setAttribute(RequestDispatcher.FORWARD_QUERY_STRING, request.getQueryString());
-			request.setAttribute(RequestDispatcher.FORWARD_REQUEST_URI, request.getRequestURI());
-			request.setAttribute(RequestDispatcher.FORWARD_SERVLET_PATH, request.getServletPath());
+			setter.setAttribute(RequestDispatcher.FORWARD_CONTEXT_PATH, originalRequest.getContextPath());
+			setter.setAttribute(RequestDispatcher.FORWARD_PATH_INFO, originalRequest.getPathInfo());
+			setter.setAttribute(RequestDispatcher.FORWARD_QUERY_STRING, originalRequest.getQueryString());
+			setter.setAttribute(RequestDispatcher.FORWARD_REQUEST_URI, originalRequest.getRequestURI());
+			setter.setAttribute(RequestDispatcher.FORWARD_SERVLET_PATH, originalRequest.getServletPath());
 		}
 
-		HttpServletRequestBuilderWrapperImpl httpRuntimeRequest = HttpServletRequestBuilderWrapperImpl.findHttpRuntimeRequest(request);
-		boolean pushedState = false;
+		HttpServletRequest request = originalRequest;
+		HttpServletRequestWrapperImpl httpRuntimeRequest = HttpServletRequestWrapperImpl.findHttpRuntimeRequest(originalRequest);
 
 		try {
 			if (httpRuntimeRequest == null) {
-				httpRuntimeRequest = new HttpServletRequestBuilderWrapperImpl(request, this, dispatcherType);
+				httpRuntimeRequest = new HttpServletRequestWrapperImpl(originalRequest);
 				request = httpRuntimeRequest;
 				response = new HttpServletResponseWrapperImpl(response);
 			}
-			else {
-				httpRuntimeRequest.push(this);
-				pushedState = true;
-			}
 
-			ResponseStateHandler responseStateHandler = new ResponseStateHandler(
-				request, response, this, dispatcherType);
+			httpRuntimeRequest.push(this);
+
+			ResponseStateHandler responseStateHandler = new ResponseStateHandler(request, response, this);
 
 			responseStateHandler.processRequest();
 
@@ -107,14 +128,18 @@ public class DispatchTargets {
 			return true;
 		}
 		finally {
-			if (pushedState) {
-				httpRuntimeRequest.pop();
-			}
+			httpRuntimeRequest.pop();
+
+			setter.close();
 		}
 	}
 
 	public ContextController getContextController() {
 		return contextController;
+	}
+
+	public DispatcherType getDispatcherType() {
+		return dispatcherType;
 	}
 
 	public List<FilterRegistration> getMatchingFilterRegistrations() {
@@ -134,7 +159,14 @@ public class DispatchTargets {
 	}
 
 	public String getRequestURI() {
-		return requestURI;
+		if (requestURI == null) {
+			return null;
+		}
+		return getContextController().getFullContextPath() + requestURI;
+	}
+
+	public String getServletName() {
+		return servletName;
 	}
 
 	public String getServletPath() {
@@ -145,9 +177,18 @@ public class DispatchTargets {
 		return endpointRegistration;
 	}
 
+	public void setDispatcherType(DispatcherType dispatcherType) {
+		this.dispatcherType = dispatcherType;
+	}
+
+	@Override
+	public String toString() {
+		return string;
+	}
+
 	private static Map<String, String[]> queryStringToParameterMap(String queryString) {
 		if ((queryString == null) || (queryString.length() == 0)) {
-			return Collections.emptyMap();
+			return new HashMap<String, String[]>();
 		}
 
 		try {
@@ -164,20 +205,53 @@ public class DispatchTargets {
 				values = Params.append(values, value);
 				parameterMap.put(name, values);
 			}
-			return Collections.unmodifiableMap(parameterMap);
+			return parameterMap;
 		}
 		catch (UnsupportedEncodingException unsupportedEncodingException) {
 			throw new RuntimeException(unsupportedEncodingException);
 		}
 	}
 
+	private static class RequestAttributeSetter implements Closeable {
+
+		private final ServletRequest servletRequest;
+		private final Map<String, Object> oldValues = new HashMap<String, Object>();
+
+		public RequestAttributeSetter(ServletRequest servletRequest) {
+			this.servletRequest = servletRequest;
+		}
+
+		public void setAttribute(String name, Object value) {
+			oldValues.put(name, servletRequest.getAttribute(name));
+
+			servletRequest.setAttribute(name, value);
+		}
+
+		public void close() {
+			for (Map.Entry<String, Object> oldValue : oldValues.entrySet()) {
+				if (oldValue.getValue() == null) {
+					servletRequest.removeAttribute(oldValue.getKey());
+				}
+				else {
+					servletRequest.setAttribute(oldValue.getKey(), oldValue.getValue());
+				}
+			}
+		}
+	}
+
+	private static final String SIMPLE_NAME =
+		DispatchTargets.class.getSimpleName();
+
 	private final ContextController contextController;
+	private DispatcherType dispatcherType;
 	private final EndpointRegistration<?> endpointRegistration;
 	private final List<FilterRegistration> matchingFilterRegistrations;
 	private final String pathInfo;
-	private final Map<String, String[]> parameterMap;
-	private final String queryString;
+	private Map<String, String[]> parameterMap;
+	private String queryString;
 	private final String requestURI;
 	private final String servletPath;
+	private final String servletName;
+	private final String string;
 
 }
