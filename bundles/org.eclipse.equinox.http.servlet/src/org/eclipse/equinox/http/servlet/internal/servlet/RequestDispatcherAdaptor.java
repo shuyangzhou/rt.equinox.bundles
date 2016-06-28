@@ -21,14 +21,19 @@ import org.eclipse.equinox.http.servlet.internal.context.DispatchTargets;
 //This class unwraps the request so it can be processed by the underlying servlet container.
 public class RequestDispatcherAdaptor implements RequestDispatcher {
 
+	private static final String SIMPLE_NAME = RequestDispatcherAdaptor.class.getSimpleName();
+
 	private final DispatchTargets dispatchTargets;
 	private final String path;
+	private final String string;
 
 	public RequestDispatcherAdaptor(
 		DispatchTargets dispatchTargets, String path) {
 
 		this.dispatchTargets = dispatchTargets;
 		this.path = path;
+
+		this.string = SIMPLE_NAME + '[' + path + ", " + dispatchTargets + ']'; //$NON-NLS-1$
 	}
 
 	public void forward(ServletRequest request, ServletResponse response)
@@ -45,6 +50,11 @@ public class RequestDispatcherAdaptor implements RequestDispatcher {
 		dispatchTargets.doDispatch(
 			(HttpServletRequest)request, (HttpServletResponse)response,
 			path, DispatcherType.INCLUDE);
+	}
+
+	@Override
+	public String toString() {
+		return string;
 	}
 
 }
