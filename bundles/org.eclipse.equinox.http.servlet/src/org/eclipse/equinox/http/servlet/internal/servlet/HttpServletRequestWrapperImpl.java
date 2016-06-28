@@ -168,46 +168,38 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 				if (servletName != null) {
 					return null;
 				}
-				if (super.getAttribute(RequestDispatcher.INCLUDE_CONTEXT_PATH) != null) {
-					return super.getAttribute(RequestDispatcher.INCLUDE_CONTEXT_PATH);
-				}
-				return current.getContextController().getContextPath();
+
+				return _getAttribute(
+					attributeName,
+					current.getContextController().getContextPath());
 			}
 			else if (attributeName.equals(RequestDispatcher.INCLUDE_PATH_INFO)) {
 				if (servletName != null) {
 					return null;
 				}
-				if (super.getAttribute(RequestDispatcher.INCLUDE_PATH_INFO) != null) {
-					return super.getAttribute(RequestDispatcher.INCLUDE_PATH_INFO);
-				}
-				return current.getPathInfo();
+
+				return _getAttribute(attributeName, current.getPathInfo());
 			}
 			else if (attributeName.equals(RequestDispatcher.INCLUDE_QUERY_STRING)) {
 				if (servletName != null) {
 					return null;
 				}
-				if (super.getAttribute(RequestDispatcher.INCLUDE_QUERY_STRING) != null) {
-					return super.getAttribute(RequestDispatcher.INCLUDE_QUERY_STRING);
-				}
-				return current.getQueryString();
+
+				return _getAttribute(attributeName, current.getQueryString());
 			}
 			else if (attributeName.equals(RequestDispatcher.INCLUDE_REQUEST_URI)) {
 				if (servletName != null) {
 					return null;
 				}
-				if (super.getAttribute(RequestDispatcher.INCLUDE_REQUEST_URI) != null) {
-					return super.getAttribute(RequestDispatcher.INCLUDE_REQUEST_URI);
-				}
-				return current.getRequestURI();
+
+				return _getAttribute(attributeName, current.getRequestURI());
 			}
 			else if (attributeName.equals(RequestDispatcher.INCLUDE_SERVLET_PATH)) {
 				if (servletName != null) {
 					return null;
 				}
-				if (super.getAttribute(RequestDispatcher.INCLUDE_SERVLET_PATH) != null) {
-					return super.getAttribute(RequestDispatcher.INCLUDE_SERVLET_PATH);
-				}
-				return current.getServletPath();
+
+				return _getAttribute(attributeName, current.getServletPath());
 			}
 
 			if (Arrays.binarySearch(dispatcherAttributes, attributeName) > -1) {
@@ -365,6 +357,16 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 					servletRequestAttributeEvent);
 			}
 		}
+	}
+
+	private Object _getAttribute(String attributeName, String defaultValue) {
+		Object attributeValue = super.getAttribute(attributeName);
+
+		if (attributeValue != null) {
+			return attributeValue;
+		}
+
+		return defaultValue;
 	}
 
 }
