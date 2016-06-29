@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2005, 2015 Cognos Incorporated, IBM Corporation and others.
+ * Copyright (c) 2005, 2016 Cognos Incorporated, IBM Corporation and others.
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -9,6 +9,7 @@
  *     Cognos Incorporated - initial API and implementation
  *     IBM Corporation - bug fixes and enhancements
  *     Raymond Augé <raymond.auge@liferay.com> - Bug 436698
+ *     Juan Gonzalez <juan.gonzalez@liferay.com> - Bug 486412
  *******************************************************************************/
 package org.eclipse.equinox.http.servlet.internal.servlet;
 
@@ -54,6 +55,19 @@ public class ServletContextAdaptor {
 			}
 		}
 
+		try {
+			Method equalsMethod = Object.class.getMethod("equals", Object.class);  //$NON-NLS-1$
+			Method equalsHandlerMethod = ServletContextAdaptor.class.getMethod("equals", Object.class); //$NON-NLS-1$
+			methods.put(equalsMethod, equalsHandlerMethod);
+
+			Method hashCodeMethod = Object.class.getMethod("hashCode", (Class<?>[])null);  //$NON-NLS-1$
+			Method hashCodeHandlerMethod = ServletContextAdaptor.class.getMethod("hashCode", (Class<?>[])null); //$NON-NLS-1$
+			methods.put(hashCodeMethod, hashCodeHandlerMethod);
+		}
+		catch (NoSuchMethodException e) {
+				// do nothing
+		}
+
 		return methods;
 	}
 
@@ -65,7 +79,6 @@ public class ServletContextAdaptor {
 		this.contextController = contextController;
 		this.proxyContext = contextController.getProxyContext();
 		this.servletContext = proxyContext.getServletContext();
-		this.contextName = contextController.getContextName();
 		this.servletContextHelper = servletContextHelper;
 		this.eventListeners = eventListeners;
 		this.acc = acc;
@@ -74,16 +87,37 @@ public class ServletContextAdaptor {
 		BundleWiring bundleWiring = this.bundle.adapt(BundleWiring.class);
 
 		this.classLoader = bundleWiring.getClassLoader();
+
+		this.string = SIMPLE_NAME + '[' + contextController + ']';
 	}
 
 	public ServletContext createServletContext() {
 		Class<?> clazz = getClass();
 		ClassLoader curClassLoader = clazz.getClassLoader();
 		Class<?>[] interfaces = new Class[] {ServletContext.class};
-		InvocationHandler invocationHandler = createInvocationHandler();
 
 		return (ServletContext)Proxy.newProxyInstance(
-			curClassLoader, interfaces, invocationHandler);
+			curClassLoader, interfaces, new AdaptorInvocationHandler());
+	}
+
+	public boolean equals (Object obj) {
+		if (!(obj instanceof ServletContext)) {
+			return false;
+		}
+
+		if (!(Proxy.isProxyClass(obj.getClass())))  {
+			return false;
+		}
+
+		InvocationHandler invocationHandler = Proxy.getInvocationHandler(obj);
+
+		if (!(invocationHandler instanceof AdaptorInvocationHandler)) {
+			return false;
+		}
+
+		AdaptorInvocationHandler adaptorInvocationHandler = (AdaptorInvocationHandler)invocationHandler;
+
+		return contextController.equals(adaptorInvocationHandler.getContextController());
 	}
 
 	public ClassLoader getClassLoader() {
@@ -240,7 +274,11 @@ public class ServletContextAdaptor {
 	}
 
 	public String getServletContextName() {
-		return contextName;
+		return contextController.getContextName();
+	}
+
+	public int hashCode() {
+		return contextController.hashCode();
 	}
 
 	public void removeAttribute(String attributeName) {
@@ -342,8 +380,18 @@ public class ServletContextAdaptor {
 		}
 	}
 
+	public String toString() {
+		return string;
+	}
+
 	Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-		servletContextTL.set((ServletContext)proxy);
+		boolean useThreadLocal =
+			"removeAttribute".equals(method.getName()) ||
+			"setAttribute".equals(method.getName());
+
+		if (useThreadLocal) {
+			servletContextTL.set((ServletContext)proxy);
+		}
 
 		try {
 			Method m = contextToHandlerMethods.get(method);
@@ -357,33 +405,43 @@ public class ServletContextAdaptor {
 			}
 		}
 		finally {
-			servletContextTL.remove();
-		}
-	}
-
-	private InvocationHandler createInvocationHandler() {
-		return new InvocationHandler() {
-			public Object invoke(Object proxy, Method method, Object[] args)
-				throws Throwable {
-
-				return ServletContextAdaptor.this.invoke(proxy, method, args);
+			if (useThreadLocal) {
+				servletContextTL.remove();
 			}
-		};
+		}
 	}
 
 	private Dictionary<String, Object> getContextAttributes() {
 		return proxyContext.getContextAttributes(contextController);
 	}
 
+	private class AdaptorInvocationHandler implements InvocationHandler {
+		public AdaptorInvocationHandler() {}
+
+		public ContextController getContextController() {
+			return contextController;
+		}
+
+		public Object invoke(Object proxy, Method method, Object[] args)
+			throws Throwable {
+
+			return ServletContextAdaptor.this.invoke(proxy, method, args);
+		}
+	}
+
+	private final static String SIMPLE_NAME =
+		ServletContextAdaptor.class.getSimpleName();
+
+	private final static ThreadLocal<ServletContext> servletContextTL = new ThreadLocal<ServletContext>();
+
 	private final AccessControlContext acc;
 	private final Bundle bundle;
 	private final ClassLoader classLoader;
-	private final ContextController contextController;
-	private final String contextName;
+	final ContextController contextController;
 	private final EventListeners eventListeners;
 	private final ProxyContext proxyContext;
 	private final ServletContext servletContext;
 	final ServletContextHelper servletContextHelper;
-	private final ThreadLocal<ServletContext> servletContextTL = new ThreadLocal<ServletContext>();
+	private final String string;
 
 }
