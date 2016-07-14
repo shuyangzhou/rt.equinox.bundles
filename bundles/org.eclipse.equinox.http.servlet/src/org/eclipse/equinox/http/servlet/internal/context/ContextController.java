@@ -143,8 +143,6 @@ public class ContextController {
 		this.trackingContext = trackingContextParam;
 		this.consumingContext = consumingContext;
 
-		this.string = SIMPLE_NAME + '[' + contextName + ", " + trackingContextParam.getBundle() + ']'; //$NON-NLS-1$
-
 		listenerServiceTracker = new ServiceTracker<EventListener, AtomicReference<ListenerRegistration>>(
 			trackingContext, httpServiceRuntime.getListenerFilter(),
 			new ContextListenerTrackerCustomizer(
@@ -897,7 +895,15 @@ public class ContextController {
 
 	@Override
 	public String toString() {
-		return string;
+		String value = string;
+
+		if (value == null) {
+			value = SIMPLE_NAME + '[' + contextName + ", " + trackingContext.getBundle() + ']'; //$NON-NLS-1$
+
+			string = value;
+		}
+
+		return value;
 	}
 
 	private void addEnpointRegistrationsToRequestInfo(
@@ -1266,7 +1272,7 @@ public class ContextController {
 	private final ServiceReference<ServletContextHelper> servletContextHelperRef;
 	private final String servletContextHelperRefFilter;
 	private boolean shutdown;
-	private final String string;
+	private String string;
 
 	private final ServiceTracker<Filter, AtomicReference<FilterRegistration>> filterServiceTracker;
 	private final ServiceTracker<EventListener, AtomicReference<ListenerRegistration>> listenerServiceTracker;
