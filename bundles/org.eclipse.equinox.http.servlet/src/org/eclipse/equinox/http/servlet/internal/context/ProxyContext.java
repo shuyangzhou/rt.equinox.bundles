@@ -13,6 +13,7 @@
 package org.eclipse.equinox.http.servlet.internal.context;
 
 import java.io.File;
+import java.io.Serializable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -117,7 +118,9 @@ public class ProxyContext {
 		return directory.delete();
 	}
 
-	public class ContextAttributes extends Hashtable<String, Object> {
+	public class ContextAttributes
+		extends Dictionary<String, Object> implements Serializable {
+
 		private static final long serialVersionUID = 1916670423277243587L;
 		private final AtomicInteger referenceCount = new AtomicInteger();
 
@@ -150,6 +153,44 @@ public class ProxyContext {
 		public int referenceCount() {
 			return referenceCount.get();
 		}
+
+		@Override
+		public Enumeration<Object> elements() {
+			return Collections.enumeration(_map.values());
+		}
+
+		@Override
+		public Object get(Object key) {
+			return _map.get(key);
+		}
+
+		@Override
+		public boolean isEmpty() {
+			return _map.isEmpty();
+		}
+
+		@Override
+		public Enumeration<String> keys() {
+			return Collections.enumeration(_map.keySet());
+		}
+
+		@Override
+		public Object put(String key, Object value) {
+			return _map.put(key, value);
+		}
+
+		@Override
+		public Object remove(Object key) {
+			return _map.remove(key);
+		}
+
+		@Override
+		public int size() {
+			return _map.size();
+		}
+
+		private final Map<String, Object> _map =
+			new ConcurrentHashMap<String, Object>();
 	}
 
 }
