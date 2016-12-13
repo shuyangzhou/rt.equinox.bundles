@@ -17,7 +17,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiFunction;
 import javax.servlet.ServletContext;
 import org.eclipse.equinox.http.servlet.internal.util.Const;
 
@@ -59,54 +58,34 @@ public class ProxyContext {
 	public void createContextAttributes(
 		ContextController controller) {
 
-		attributesMap.compute(
-			controller,
-			new BiFunction<ContextController, ContextAttributes, ContextAttributes>() {
+		synchronized (attributesMap) {
+			ContextAttributes contextAttributes = attributesMap.get(controller);
 
-				@Override
-				public ContextAttributes apply(
-					ContextController contextController,
-					ContextAttributes contextAttributes) {
+			if (contextAttributes == null) {
+				contextAttributes = new ContextAttributes(controller);
 
-					if (contextAttributes == null) {
-						contextAttributes = new ContextAttributes(
-							contextController);
-					}
+				attributesMap.put(controller, contextAttributes);
+			}
 
-					contextAttributes.addReference();
-
-					return contextAttributes;
-				}
-
-			});
+			contextAttributes.addReference();
+		}
 	}
 
 	public void destroyContextAttributes(
 		ContextController controller) {
 
-		attributesMap.compute(
-			controller,
-			new BiFunction<ContextController, ContextAttributes, ContextAttributes>() {
+		synchronized (attributesMap) {
+			ContextAttributes contextAttributes = attributesMap.get(controller);
 
-				@Override
-				public ContextAttributes apply(
-					ContextController contextController,
-					ContextAttributes contextAttributes) {
+			if (contextAttributes == null) {
+				throw new IllegalStateException("too many calls");
+			}
 
-					if (contextAttributes == null) {
-						throw new IllegalStateException("too many calls");
-					}
-
-					if (contextAttributes.removeReference() == 0) {
-						contextAttributes.destroy();
-
-						return null;
-					}
-
-					return contextAttributes;
-				}
-
-			});
+			if (contextAttributes.removeReference() == 0) {
+				attributesMap.remove(controller);
+				contextAttributes.destroy();
+			}
+		}
 	}
 
 	public Dictionary<String, Object> getContextAttributes(
