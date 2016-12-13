@@ -16,6 +16,7 @@ import java.io.File;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import javax.servlet.ServletContext;
 import org.eclipse.equinox.http.servlet.internal.util.Const;
@@ -139,7 +140,7 @@ public class ProxyContext {
 
 	public class ContextAttributes extends Hashtable<String, Object> {
 		private static final long serialVersionUID = 1916670423277243587L;
-		private int referenceCount;
+		private final AtomicInteger referenceCount = new AtomicInteger();
 
 		public ContextAttributes(ContextController controller) {
 			if (proxyContextTempDir != null) {
@@ -159,16 +160,16 @@ public class ProxyContext {
 				deleteDirectory(contextTempDir);
 		}
 
-		public void addReference() {
-			referenceCount++;
+		public int addReference() {
+			return referenceCount.incrementAndGet();
 		}
 
-		public void removeReference() {
-			referenceCount--;
+		public int removeReference() {
+			return referenceCount.decrementAndGet();
 		}
 
 		public int referenceCount() {
-			return referenceCount;
+			return referenceCount.get();
 		}
 	}
 
