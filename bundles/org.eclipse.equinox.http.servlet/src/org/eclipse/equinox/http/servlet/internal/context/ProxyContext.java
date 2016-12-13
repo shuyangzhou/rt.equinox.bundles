@@ -28,7 +28,6 @@ import org.eclipse.equinox.http.servlet.internal.util.Const;
 public class ProxyContext {
 	private static final String JAVAX_SERVLET_CONTEXT_TEMPDIR = "javax.servlet.context.tempdir"; //$NON-NLS-1$
 
-	private String servletPath;
 	private HashMap<ContextController, ContextAttributes> attributesMap =
 		new HashMap<ContextController, ContextAttributes>();
 	File proxyContextTempDir;
@@ -49,8 +48,8 @@ public class ProxyContext {
 			deleteDirectory(proxyContextTempDir);
 	}
 
-	public synchronized String getServletPath() {
-		return (servletPath == null ? Const.BLANK : servletPath);
+	public String getServletPath() {
+		return Const.BLANK;
 	}
 
 	public synchronized void createContextAttributes(
