@@ -58,7 +58,7 @@ public class HttpServiceRuntimeImpl
 		this.listenerServiceFilter = createListenerFilter(consumingContext, parentServletContext);
 
 		this.parentServletContext = parentServletContext;
-		this.attributes = Collections.unmodifiableMap(attributes);
+		this.attributes = attributes;
 		this.targetFilter = "(" + Activator.UNIQUE_SERVICE_ID + "=" + attributes.get(Activator.UNIQUE_SERVICE_ID) + ")";  //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 
 		contextServiceTracker =
