@@ -197,10 +197,12 @@ public class HttpServiceRuntimeImpl
 	}
 
 	public DispatchTargets getDispatchTargets(
-		String path, RequestInfoDTO requestInfoDTO) {
+		String pathString, RequestInfoDTO requestInfoDTO) {
 
-		String queryString = Path.findQueryString(path);
-		String requestURI = Path.stripQueryString(path);
+		Path path = new Path(pathString);
+
+		String queryString = path.getQueryString();
+		String requestURI = path.getRequestURI();
 
 		// perfect match
 		DispatchTargets dispatchTargets = getDispatchTargets(
@@ -208,10 +210,9 @@ public class HttpServiceRuntimeImpl
 
 		if (dispatchTargets == null) {
 			// extension match
-			String extension = Path.findExtension(requestURI);
 
 			dispatchTargets = getDispatchTargets(
-				requestURI, extension, queryString, Match.EXTENSION,
+				requestURI, path.getExtension(), queryString, Match.EXTENSION,
 				requestInfoDTO);
 		}
 
