@@ -23,7 +23,7 @@ import org.osgi.service.http.HttpContext;
 
 public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 
-	private final Stack<DispatchTargets> dispatchTargets = new Stack<DispatchTargets>();
+	private final Deque<DispatchTargets> dispatchTargets = new LinkedList<DispatchTargets>();
 	private final HttpServletRequest request;
 
 	private static final Set<String> dispatcherAttributes =	new HashSet<String>();
@@ -87,7 +87,7 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 
 		if ((currentDispatchTargets.getServletName() != null) ||
 			(currentDispatchTargets.getDispatcherType() == DispatcherType.INCLUDE)) {
-			return this.dispatchTargets.get(0).getPathInfo();
+			return this.dispatchTargets.getLast().getPathInfo();
 		}
 		return currentDispatchTargets.getPathInfo();
 	}
@@ -147,7 +147,7 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 
 		if ((currentDispatchTargets.getServletName() != null) ||
 			(currentDispatchTargets.getDispatcherType() == DispatcherType.INCLUDE)) {
-			return this.dispatchTargets.get(0).getServletPath();
+			return this.dispatchTargets.getLast().getServletPath();
 		}
 		if (currentDispatchTargets.getServletPath().equals(Const.SLASH)) {
 			return Const.BLANK;
@@ -256,7 +256,7 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 				return null;
 			}
 
-			DispatchTargets original = dispatchTargets.get(0);
+			DispatchTargets original = dispatchTargets.getLast();
 
 			if (attributeName.equals(RequestDispatcher.FORWARD_CONTEXT_PATH)) {
 				return original.getContextController().getContextPath();
