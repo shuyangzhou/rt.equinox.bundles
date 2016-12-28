@@ -164,6 +164,13 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 
 		DispatcherType dispatcherType = current.getDispatcherType();
 
+		if ((dispatcherType == DispatcherType.ASYNC) ||
+			(dispatcherType == DispatcherType.REQUEST) ||
+			!attributeName.startsWith("javax.servlet.")) {
+
+			return request.getAttribute(attributeName);
+		}
+
 		boolean hasServletName = (current.getServletName() != null);
 
 		if (dispatcherType == DispatcherType.ERROR) {
