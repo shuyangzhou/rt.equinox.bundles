@@ -24,7 +24,7 @@ import org.eclipse.equinox.http.servlet.internal.util.EventListeners;
 public class HttpSessionAdaptor implements HttpSession, Serializable {
 	private static final long serialVersionUID = 3418610936889860782L;
 
-	static class ParentSessionListener implements HttpSessionBindingListener, Serializable {
+	static class ParentSessionListener implements HttpSessionBindingListener {
 		private static final long serialVersionUID = 4626167646903550760L;
 
 		private static final String PARENT_SESSION_LISTENER_KEY = "org.eclipse.equinox.http.parent.session.listener"; //$NON-NLS-1$
