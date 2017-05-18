@@ -15,11 +15,14 @@
 package org.eclipse.equinox.http.servlet.internal.servlet;
 
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import javax.servlet.http.HttpSession;
+import javax.servlet.http.HttpSessionAttributeListener;
+import javax.servlet.http.HttpSessionBindingEvent;
 import javax.servlet.http.HttpSessionEvent;
 import javax.servlet.http.HttpSessionListener;
 import org.eclipse.equinox.http.servlet.internal.context.ContextController;
@@ -58,6 +61,28 @@ public class HttpSessionTracker {
 					}
 					catch (IllegalStateException ise) {
 						// outer session is already invalidated
+					}
+				}
+			}
+
+			List<HttpSessionAttributeListener> httpSessionAttributeListeners =
+				eventListeners.get(HttpSessionAttributeListener.class);
+
+			if (!httpSessionListeners.isEmpty()) {
+				Enumeration<String> enumeration =
+					httpSessionAdaptor.getAttributeNames();
+
+				while (enumeration.hasMoreElements()) {
+					HttpSessionBindingEvent httpSessionBindingEvent =
+						new HttpSessionBindingEvent(
+							httpSessionAdaptor, enumeration.nextElement());
+
+					for (HttpSessionAttributeListener
+							httpSessionAttributeListener :
+								httpSessionAttributeListeners) {
+
+						httpSessionAttributeListener.attributeRemoved(
+							httpSessionBindingEvent);
 					}
 				}
 			}
