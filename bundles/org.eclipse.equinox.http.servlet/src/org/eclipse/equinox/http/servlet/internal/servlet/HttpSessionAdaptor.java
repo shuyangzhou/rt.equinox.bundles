@@ -14,7 +14,6 @@ package org.eclipse.equinox.http.servlet.internal.servlet;
 
 import java.io.Serializable;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import javax.servlet.ServletContext;
 import javax.servlet.http.*;
 import org.eclipse.equinox.http.servlet.internal.context.ContextController;
@@ -23,82 +22,6 @@ import org.eclipse.equinox.http.servlet.internal.util.EventListeners;
 // This class adapts HttpSessions in order to return the right ServletContext and attributes
 public class HttpSessionAdaptor implements HttpSession, Serializable {
 	private static final long serialVersionUID = 3418610936889860782L;
-
-	static class ParentSessionListener implements HttpSessionBindingListener, Serializable {
-		private static final long serialVersionUID = 4626167646903550760L;
-
-		private static final String PARENT_SESSION_LISTENER_KEY = "org.eclipse.equinox.http.parent.session.listener"; //$NON-NLS-1$
-		transient final Set<HttpSessionAdaptor> innerSessions = Collections.newSetFromMap(new ConcurrentHashMap<HttpSessionAdaptor, Boolean>());
-		@Override
-		public void valueBound(HttpSessionBindingEvent event) {
-			// do nothing
-		}
-
-		@Override
-		public void valueUnbound(HttpSessionBindingEvent event) {
-			// Here we assume the unbound event is signifying the session is being invalidated.
-			// Must invalidate the inner sessions
-			Iterator<HttpSessionAdaptor> iterator = innerSessions.iterator();
-
-			while (iterator.hasNext()) {
-				HttpSessionAdaptor innerSession = iterator.next();
-
-				iterator.remove();
-
-				ContextController contextController =
-					innerSession.getController();
-
-				EventListeners eventListeners =
-					contextController.getEventListeners();
-
-				List<HttpSessionListener> httpSessionListeners =
-					eventListeners.get(HttpSessionListener.class);
-
-				if (!httpSessionListeners.isEmpty()) {
-					HttpSessionEvent httpSessionEvent = new HttpSessionEvent(
-						innerSession);
-
-					for (HttpSessionListener listener : httpSessionListeners) {
-						try {
-							listener.sessionDestroyed(httpSessionEvent);
-						}
-						catch (IllegalStateException ise) {
-							// outer session is already invalidated
-						}
-					}
-				}
-
-				contextController.removeActiveSession(
-					innerSession.getSession());
-			}
-		}
-
-		static void addHttpSessionAdaptor(HttpSessionAdaptor innerSession) {
-			HttpSession httpSession = innerSession.getSession();
-
-			ParentSessionListener parentListener;
-			// need to have a global lock here because we must ensure that this is added only once
-			synchronized (httpSession) {
-				parentListener = (ParentSessionListener) httpSession.getAttribute(PARENT_SESSION_LISTENER_KEY);
-				if (parentListener == null) {
-					parentListener = new ParentSessionListener();
-					httpSession.setAttribute(PARENT_SESSION_LISTENER_KEY, parentListener);
-				}
-			}
-
-			parentListener.innerSessions.add(innerSession);
-		}
-
-		static void removeHttpSessionAdaptor(HttpSessionAdaptor innerSession) {
-			HttpSession httpSession = innerSession.getSession();
-
-			ParentSessionListener parentListener = (ParentSessionListener) httpSession.getAttribute(PARENT_SESSION_LISTENER_KEY);
-
-			if (parentListener != null) {
-				parentListener.innerSessions.remove(innerSession);
-			}
-		}
-	}
 
 	class HttpSessionAttributeWrapper implements HttpSessionBindingListener, HttpSessionActivationListener, Serializable {
 		private static final long serialVersionUID = 7945998375225990980L;
@@ -178,7 +101,9 @@ public class HttpSessionAdaptor implements HttpSession, Serializable {
 	static public HttpSessionAdaptor createHttpSessionAdaptor(
 		HttpSession session, ServletContext servletContext, ContextController controller) {
 		HttpSessionAdaptor sessionAdaptor = new HttpSessionAdaptor(session, servletContext, controller);
-		ParentSessionListener.addHttpSessionAdaptor(sessionAdaptor);
+
+		HttpSessionTracker.addHttpSessionAdaptor(sessionAdaptor);
+
 		return sessionAdaptor;
 	}
 
@@ -260,7 +185,7 @@ public class HttpSessionAdaptor implements HttpSession, Serializable {
 		}
 
 		try {
-			ParentSessionListener.removeHttpSessionAdaptor(this);
+			HttpSessionTracker.removeHttpSessionAdaptor(this);
 		}
 		catch (IllegalStateException ise) {
 			// outer session is already invalidated
