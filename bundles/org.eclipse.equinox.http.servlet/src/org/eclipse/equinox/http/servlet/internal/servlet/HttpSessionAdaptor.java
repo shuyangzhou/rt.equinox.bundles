@@ -24,11 +24,11 @@ import org.eclipse.equinox.http.servlet.internal.util.EventListeners;
 public class HttpSessionAdaptor implements HttpSession, Serializable {
 	private static final long serialVersionUID = 3418610936889860782L;
 
+	private static final Map<String, Set<HttpSessionAdaptor>> _sessionRegistry = new ConcurrentHashMap<String, Set<HttpSessionAdaptor>>();
+
 	static class ParentSessionListener implements HttpSessionBindingListener, Serializable {
 		private static final long serialVersionUID = 4626167646903550760L;
 
-		private static final String PARENT_SESSION_LISTENER_KEY = "org.eclipse.equinox.http.parent.session.listener"; //$NON-NLS-1$
-		transient final Set<HttpSessionAdaptor> innerSessions = Collections.newSetFromMap(new ConcurrentHashMap<HttpSessionAdaptor, Boolean>());
 		@Override
 		public void valueBound(HttpSessionBindingEvent event) {
 			// do nothing
@@ -38,7 +38,20 @@ public class HttpSessionAdaptor implements HttpSession, Serializable {
 		public void valueUnbound(HttpSessionBindingEvent event) {
 			// Here we assume the unbound event is signifying the session is being invalidated.
 			// Must invalidate the inner sessions
-			Iterator<HttpSessionAdaptor> iterator = innerSessions.iterator();
+
+			HttpSession httpSession = event.getSession();
+
+			String sessionId = httpSession.getId();
+
+			Set<HttpSessionAdaptor> httpSessionAdaptors = _sessionRegistry.get(
+				sessionId);
+
+			if (httpSessionAdaptors == null) {
+				return;
+			}
+
+			Iterator<HttpSessionAdaptor> iterator = 
+				httpSessionAdaptors.iterator();
 
 			while (iterator.hasNext()) {
 				HttpSessionAdaptor innerSession = iterator.next();
@@ -76,27 +89,34 @@ public class HttpSessionAdaptor implements HttpSession, Serializable {
 		static void addHttpSessionAdaptor(HttpSessionAdaptor innerSession) {
 			HttpSession httpSession = innerSession.getSession();
 
-			ParentSessionListener parentListener;
-			// need to have a global lock here because we must ensure that this is added only once
-			synchronized (httpSession) {
-				parentListener = (ParentSessionListener) httpSession.getAttribute(PARENT_SESSION_LISTENER_KEY);
-				if (parentListener == null) {
-					parentListener = new ParentSessionListener();
-					httpSession.setAttribute(PARENT_SESSION_LISTENER_KEY, parentListener);
-				}
+			String sessionId = httpSession.getId();
+
+			Set<HttpSessionAdaptor> httpSessionAdaptors = _sessionRegistry.get(
+				sessionId);
+
+			if (httpSessionAdaptors == null) {
+				httpSessionAdaptors = Collections.newSetFromMap(
+					new ConcurrentHashMap<HttpSessionAdaptor, Boolean>());
+
+				_sessionRegistry.put(sessionId, httpSessionAdaptors);
 			}
 
-			parentListener.innerSessions.add(innerSession);
+			httpSessionAdaptors.add(innerSession);
 		}
 
 		static void removeHttpSessionAdaptor(HttpSessionAdaptor innerSession) {
 			HttpSession httpSession = innerSession.getSession();
 
-			ParentSessionListener parentListener = (ParentSessionListener) httpSession.getAttribute(PARENT_SESSION_LISTENER_KEY);
+			String sessionId = httpSession.getId();
 
-			if (parentListener != null) {
-				parentListener.innerSessions.remove(innerSession);
+			Set<HttpSessionAdaptor> httpSessionAdaptors = _sessionRegistry.get(
+				sessionId);
+
+			if (httpSessionAdaptors == null) {
+				return;
 			}
+
+			httpSessionAdaptors.remove(innerSession);
 		}
 	}
 
