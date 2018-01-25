@@ -15,6 +15,7 @@ import java.io.*;
 import java.net.URLDecoder;
 import java.util.*;
 import javax.servlet.*;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import org.eclipse.equinox.http.servlet.internal.registration.EndpointRegistration;
@@ -175,6 +176,10 @@ public class DispatchTargets {
 		return endpointRegistration;
 	}
 
+	public Map<String, Object> getSpecialOverides() {
+		return specialOverides;
+	}
+
 	public void setDispatcherType(DispatcherType dispatcherType) {
 		this.dispatcherType = dispatcherType;
 	}
@@ -258,6 +263,7 @@ public class DispatchTargets {
 	private final String requestURI;
 	private final String servletPath;
 	private final String servletName;
+	private final Map<String, Object> specialOverides = new ConcurrentHashMap<String, Object>();
 	private String string;
 
 }
