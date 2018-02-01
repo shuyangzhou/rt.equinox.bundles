@@ -181,69 +181,31 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 			}
 		}
 		else if (dispatcherType == DispatcherType.INCLUDE) {
-			if (attributeName.equals(RequestDispatcher.INCLUDE_CONTEXT_PATH)) {
-				if (hasServletName) {
-					return null;
-				}
+			if (hasServletName && attributeName.startsWith("javax.servlet.include")) {
+				return null;
+			}
 
+			if (dispatcherAttributes.contains(attributeName)) {
 				Object attributeValue = super.getAttribute(attributeName);
 
 				if (attributeValue != null) {
 					return attributeValue;
 				}
+			}
 
+			if (attributeName.equals(RequestDispatcher.INCLUDE_CONTEXT_PATH)) {
 				return current.getContextController().getContextPath();
 			}
 			else if (attributeName.equals(RequestDispatcher.INCLUDE_PATH_INFO)) {
-				if (hasServletName) {
-					return null;
-				}
-
-				Object attributeValue = super.getAttribute(attributeName);
-
-				if (attributeValue != null) {
-					return attributeValue;
-				}
-
 				return current.getPathInfo();
 			}
 			else if (attributeName.equals(RequestDispatcher.INCLUDE_QUERY_STRING)) {
-				if (hasServletName) {
-					return null;
-				}
-
-				Object attributeValue = super.getAttribute(attributeName);
-
-				if (attributeValue != null) {
-					return attributeValue;
-				}
-
 				return current.getQueryString();
 			}
 			else if (attributeName.equals(RequestDispatcher.INCLUDE_REQUEST_URI)) {
-				if (hasServletName) {
-					return null;
-				}
-
-				Object attributeValue = super.getAttribute(attributeName);
-
-				if (attributeValue != null) {
-					return attributeValue;
-				}
-
 				return current.getRequestURI();
 			}
 			else if (attributeName.equals(RequestDispatcher.INCLUDE_SERVLET_PATH)) {
-				if (hasServletName) {
-					return null;
-				}
-
-				Object attributeValue = super.getAttribute(attributeName);
-
-				if (attributeValue != null) {
-					return attributeValue;
-				}
-
 				return current.getServletPath();
 			}
 
