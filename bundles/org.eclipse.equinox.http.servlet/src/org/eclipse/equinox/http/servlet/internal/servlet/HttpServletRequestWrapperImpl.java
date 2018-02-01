@@ -47,6 +47,8 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 		dispatcherAttributes.add(RequestDispatcher.INCLUDE_SERVLET_PATH);
 	}
 
+	private static final Object NULL_PLACEHOLDER = new Object();
+
 	public static HttpServletRequestWrapperImpl findHttpRuntimeRequest(
 		HttpServletRequest request) {
 
@@ -164,6 +166,8 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 
 		DispatcherType dispatcherType = current.getDispatcherType();
 
+		Map<String, Object> specialOverides = current.getSpecialOverides();
+
 		if ((dispatcherType == DispatcherType.ASYNC) ||
 			(dispatcherType == DispatcherType.REQUEST) ||
 			!attributeName.startsWith("javax.servlet.")) {
@@ -186,6 +190,15 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 			}
 
 			if (dispatcherAttributes.contains(attributeName)) {
+				Object specialOveride = specialOverides.get(attributeName);
+
+				if (specialOveride == NULL_PLACEHOLDER) {
+					return null;
+				}
+				else if (specialOveride != null) {
+					return specialOveride;
+				}
+
 				Object attributeValue = super.getAttribute(attributeName);
 
 				if (attributeValue != null) {
@@ -216,6 +229,17 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 		else if (dispatcherType == DispatcherType.FORWARD) {
 			if (hasServletName && attributeName.startsWith("javax.servlet.forward")) {
 				return null;
+			}
+
+			if (dispatcherAttributes.contains(attributeName)) {
+				Object specialOveride = specialOverides.get(attributeName);
+
+				if (specialOveride == NULL_PLACEHOLDER) {
+					return null;
+				}
+				else if (specialOveride != null) {
+					return specialOveride;
+				}
 			}
 
 			DispatchTargets original = dispatchTargets.getLast();
@@ -303,6 +327,12 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 	}
 
 	public void removeAttribute(String name) {
+		if (dispatcherAttributes.contains(name)) {
+			DispatchTargets current = dispatchTargets.peek();
+
+			current.getSpecialOverides().remove(name);
+		}
+
 		request.removeAttribute(name);
 
 		DispatchTargets currentDispatchTarget = dispatchTargets.peek();
@@ -328,6 +358,18 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 
 	public void setAttribute(String name, Object value) {
 		boolean added = (request.getAttribute(name) == null);
+
+		if (dispatcherAttributes.contains(name)) {
+			DispatchTargets current = dispatchTargets.peek();
+
+			if (value == null) {
+				current.getSpecialOverides().put(name, NULL_PLACEHOLDER);
+			}
+			else {
+				current.getSpecialOverides().put(name, value);
+			}
+		}
+
 		request.setAttribute(name, value);
 
 		DispatchTargets currentDispatchTarget = dispatchTargets.peek();
