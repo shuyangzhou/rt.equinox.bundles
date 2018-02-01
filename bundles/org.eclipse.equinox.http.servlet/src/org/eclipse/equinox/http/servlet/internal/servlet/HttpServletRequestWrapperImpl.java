@@ -195,9 +195,6 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 				if (specialOveride == NULL_PLACEHOLDER) {
 					return null;
 				}
-				else if (specialOveride != null) {
-					return specialOveride;
-				}
 
 				Object attributeValue = super.getAttribute(attributeName);
 
@@ -236,9 +233,6 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 
 				if (specialOveride == NULL_PLACEHOLDER) {
 					return null;
-				}
-				else if (specialOveride != null) {
-					return specialOveride;
 				}
 			}
 
@@ -359,15 +353,10 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 	public void setAttribute(String name, Object value) {
 		boolean added = (request.getAttribute(name) == null);
 
-		if (dispatcherAttributes.contains(name)) {
+		if ((value == null) && dispatcherAttributes.contains(name)) {
 			DispatchTargets current = dispatchTargets.peek();
 
-			if (value == null) {
-				current.getSpecialOverides().put(name, NULL_PLACEHOLDER);
-			}
-			else {
-				current.getSpecialOverides().put(name, value);
-			}
+			current.getSpecialOverides().put(name, NULL_PLACEHOLDER);
 		}
 
 		request.setAttribute(name, value);
