@@ -176,9 +176,10 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 		}
 
 		boolean hasServletName = (current.getServletName() != null);
+		boolean isDispatcherAttribute = dispatcherAttributes.contains(attributeName);
 
 		if (dispatcherType == DispatcherType.ERROR) {
-			if (dispatcherAttributes.contains(attributeName) &&
+			if (isDispatcherAttribute &&
 				!attributeName.startsWith("javax.servlet.error.")) { //$NON-NLS-1$
 
 				return null;
@@ -189,7 +190,7 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 				return null;
 			}
 
-			if (dispatcherAttributes.contains(attributeName)) {
+			if (isDispatcherAttribute) {
 				Object specialOveride = specialOverides.get(attributeName);
 
 				if (specialOveride == NULL_PLACEHOLDER) {
@@ -219,7 +220,7 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 				return current.getServletPath();
 			}
 
-			if (dispatcherAttributes.contains(attributeName)) {
+			if (isDispatcherAttribute) {
 				return null;
 			}
 		}
@@ -228,7 +229,7 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 				return null;
 			}
 
-			if (dispatcherAttributes.contains(attributeName)) {
+			if (isDispatcherAttribute) {
 				Object specialOveride = specialOverides.get(attributeName);
 
 				if (specialOveride == NULL_PLACEHOLDER) {
@@ -254,7 +255,7 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 				return original.getServletPath();
 			}
 
-			if (dispatcherAttributes.contains(attributeName)) {
+			if (isDispatcherAttribute) {
 				return null;
 			}
 		}
