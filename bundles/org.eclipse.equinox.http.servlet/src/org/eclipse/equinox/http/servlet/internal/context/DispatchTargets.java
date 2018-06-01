@@ -91,7 +91,9 @@ public class DispatchTargets {
 			setter.setAttribute(RequestDispatcher.INCLUDE_SERVLET_PATH, getServletPath());
 		}
 		else if (dispatcherType == DispatcherType.FORWARD) {
-			response.resetBuffer();
+			if (!originalRequest.isAsyncStarted() && !response.isCommitted()) {
+				response.resetBuffer();
+			}
 
 			setter.setAttribute(RequestDispatcher.FORWARD_CONTEXT_PATH, originalRequest.getContextPath());
 			setter.setAttribute(RequestDispatcher.FORWARD_PATH_INFO, originalRequest.getPathInfo());
@@ -117,7 +119,7 @@ public class DispatchTargets {
 			responseStateHandler.processRequest();
 
 			if ((dispatcherType == DispatcherType.FORWARD) &&
-				!response.isCommitted()) {
+				!response.isCommitted() && !request.isAsyncStarted()) {
 
 				response.flushBuffer();
 				response.getWriter().close();
