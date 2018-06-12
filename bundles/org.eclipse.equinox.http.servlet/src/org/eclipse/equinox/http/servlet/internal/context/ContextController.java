@@ -847,11 +847,7 @@ public class ContextController {
 	public boolean matches(ServiceReference<?> whiteBoardService) {
 		String contextSelector = (String) whiteBoardService.getProperty(
 			HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_SELECT);
-		// make sure the context helper is either one of the built-in ones registered by this http whiteboard implementation;
-		// or is visible to the whiteboard registering bundle.
-		if (!visibleContextHelper(whiteBoardService)) {
-			return false;
-		}
+
 		if (contextSelector == null) {
 			contextSelector = httpServiceRuntime.getDefaultContextSelectFilter(whiteBoardService);
 			if (contextSelector == null) {
@@ -876,7 +872,14 @@ public class ContextController {
 			throw new IllegalArgumentException(ise);
 		}
 
-		return matches(targetFilter);
+		if (!matches(targetFilter)) {
+			return false;
+		}
+
+		// make sure the context helper is either one of the built-in ones registered by this http whiteboard implementation;
+		// or is visible to the whiteboard registering bundle.
+
+		return visibleContextHelper(whiteBoardService);
 	}
 
 	private boolean visibleContextHelper(ServiceReference<?> whiteBoardService) {
