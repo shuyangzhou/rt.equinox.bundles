@@ -857,22 +857,21 @@ public class ContextController {
 			}
 		}
 
-		if (!contextSelector.startsWith(Const.OPEN_PAREN)) {
-			contextSelector = Const.OPEN_PAREN +
-				HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME +
-					Const.EQUAL + contextSelector + Const.CLOSE_PAREN;
-		}
+		if (contextSelector.startsWith(Const.OPEN_PAREN)) {
+			org.osgi.framework.Filter targetFilter;
 
-		org.osgi.framework.Filter targetFilter;
+			try {
+				targetFilter = FrameworkUtil.createFilter(contextSelector);
+			}
+			catch (InvalidSyntaxException ise) {
+				throw new IllegalArgumentException(ise);
+			}
 
-		try {
-			targetFilter = FrameworkUtil.createFilter(contextSelector);
+			if (!matches(targetFilter)) {
+				return false;
+			}
 		}
-		catch (InvalidSyntaxException ise) {
-			throw new IllegalArgumentException(ise);
-		}
-
-		if (!matches(targetFilter)) {
+		else if (!contextName.equals(contextSelector)) {
 			return false;
 		}
 
