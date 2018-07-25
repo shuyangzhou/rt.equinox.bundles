@@ -47,6 +47,8 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 		dispatcherAttributes.add(RequestDispatcher.INCLUDE_SERVLET_PATH);
 	}
 
+	private static final Object NULL_PLACEHOLDER = new Object();
+
 	public static HttpServletRequestWrapperImpl findHttpRuntimeRequest(
 		HttpServletRequest request) {
 
@@ -164,6 +166,8 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 
 		DispatcherType dispatcherType = current.getDispatcherType();
 
+		Map<String, Object> specialOverides = current.getSpecialOverides();
+
 		if ((dispatcherType == DispatcherType.ASYNC) ||
 			(dispatcherType == DispatcherType.REQUEST) ||
 			!attributeName.startsWith("javax.servlet.")) {
@@ -172,17 +176,24 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 		}
 
 		boolean hasServletName = (current.getServletName() != null);
+		boolean isDispatcherAttribute = dispatcherAttributes.contains(attributeName);
 
 		if (dispatcherType == DispatcherType.ERROR) {
-			if (dispatcherAttributes.contains(attributeName) &&
+			if (isDispatcherAttribute &&
 				!attributeName.startsWith("javax.servlet.error.")) { //$NON-NLS-1$
 
 				return null;
 			}
 		}
 		else if (dispatcherType == DispatcherType.INCLUDE) {
-			if (attributeName.equals(RequestDispatcher.INCLUDE_CONTEXT_PATH)) {
-				if (hasServletName) {
+			if (hasServletName && attributeName.startsWith("javax.servlet.include")) {
+				return null;
+			}
+
+			if (isDispatcherAttribute) {
+				Object specialOveride = specialOverides.get(attributeName);
+
+				if (specialOveride == NULL_PLACEHOLDER) {
 					return null;
 				}
 
@@ -191,69 +202,39 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 				if (attributeValue != null) {
 					return attributeValue;
 				}
+			}
 
+			if (attributeName.equals(RequestDispatcher.INCLUDE_CONTEXT_PATH)) {
 				return current.getContextController().getContextPath();
 			}
 			else if (attributeName.equals(RequestDispatcher.INCLUDE_PATH_INFO)) {
-				if (hasServletName) {
-					return null;
-				}
-
-				Object attributeValue = super.getAttribute(attributeName);
-
-				if (attributeValue != null) {
-					return attributeValue;
-				}
-
 				return current.getPathInfo();
 			}
 			else if (attributeName.equals(RequestDispatcher.INCLUDE_QUERY_STRING)) {
-				if (hasServletName) {
-					return null;
-				}
-
-				Object attributeValue = super.getAttribute(attributeName);
-
-				if (attributeValue != null) {
-					return attributeValue;
-				}
-
 				return current.getQueryString();
 			}
 			else if (attributeName.equals(RequestDispatcher.INCLUDE_REQUEST_URI)) {
-				if (hasServletName) {
-					return null;
-				}
-
-				Object attributeValue = super.getAttribute(attributeName);
-
-				if (attributeValue != null) {
-					return attributeValue;
-				}
-
 				return current.getRequestURI();
 			}
 			else if (attributeName.equals(RequestDispatcher.INCLUDE_SERVLET_PATH)) {
-				if (hasServletName) {
-					return null;
-				}
-
-				Object attributeValue = super.getAttribute(attributeName);
-
-				if (attributeValue != null) {
-					return attributeValue;
-				}
-
 				return current.getServletPath();
 			}
 
-			if (dispatcherAttributes.contains(attributeName)) {
+			if (isDispatcherAttribute) {
 				return null;
 			}
 		}
 		else if (dispatcherType == DispatcherType.FORWARD) {
 			if (hasServletName && attributeName.startsWith("javax.servlet.forward")) {
 				return null;
+			}
+
+			if (isDispatcherAttribute) {
+				Object specialOveride = specialOverides.get(attributeName);
+
+				if (specialOveride == NULL_PLACEHOLDER) {
+					return null;
+				}
 			}
 
 			DispatchTargets original = dispatchTargets.getLast();
@@ -274,7 +255,7 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 				return original.getServletPath();
 			}
 
-			if (dispatcherAttributes.contains(attributeName)) {
+			if (isDispatcherAttribute) {
 				return null;
 			}
 		}
@@ -341,6 +322,12 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 	}
 
 	public void removeAttribute(String name) {
+		if (dispatcherAttributes.contains(name)) {
+			DispatchTargets current = dispatchTargets.peek();
+
+			current.getSpecialOverides().remove(name);
+		}
+
 		request.removeAttribute(name);
 
 		DispatchTargets currentDispatchTarget = dispatchTargets.peek();
@@ -366,6 +353,13 @@ public class HttpServletRequestWrapperImpl extends HttpServletRequestWrapper {
 
 	public void setAttribute(String name, Object value) {
 		boolean added = (request.getAttribute(name) == null);
+
+		if ((value == null) && dispatcherAttributes.contains(name)) {
+			DispatchTargets current = dispatchTargets.peek();
+
+			current.getSpecialOverides().put(name, NULL_PLACEHOLDER);
+		}
+
 		request.setAttribute(name, value);
 
 		DispatchTargets currentDispatchTarget = dispatchTargets.peek();
