@@ -117,13 +117,6 @@ public class ContextController {
 
 		long serviceId = (Long)servletContextHelperRef.getProperty(Constants.SERVICE_ID);
 
-		StringBuilder filterBuilder = new StringBuilder();
-		filterBuilder.append('(');
-		filterBuilder.append(Constants.SERVICE_ID);
-		filterBuilder.append('=');
-		filterBuilder.append(serviceId);
-		filterBuilder.append(')');
-		this.servletContextHelperRefFilter = filterBuilder.toString();
 		this.proxyContext = proxyContext;
 		this.httpServiceRuntime = httpServiceRuntime;
 		this.contextName = contextName;
@@ -885,15 +878,10 @@ public class ContextController {
 		if (consumingContext.getBundle().equals(servletContextHelperRef.getBundle())) {
 			return true;
 		}
-		try {
-			if (whiteBoardService.getBundle().getBundleContext().getAllServiceReferences(ServletContextHelper.class.getName(), servletContextHelperRefFilter) != null) {
-				return true;
-			}
-		}
-		catch (InvalidSyntaxException e) {
-			// ignore
-		}
-		return false;
+
+		return servletContextHelperRef.isAssignableTo(
+			whiteBoardService.getBundle(),
+			ServletContextHelper.class.getName());
 	}
 
 	public boolean matches(org.osgi.framework.Filter targetFilter) {
@@ -1281,7 +1269,6 @@ public class ContextController {
 	private final Set<ListenerRegistration> listenerRegistrations = new HashSet<ListenerRegistration>();
 	private final ProxyContext proxyContext;
 	private final ServiceReference<ServletContextHelper> servletContextHelperRef;
-	private final String servletContextHelperRefFilter;
 	private boolean shutdown;
 	private String string;
 
