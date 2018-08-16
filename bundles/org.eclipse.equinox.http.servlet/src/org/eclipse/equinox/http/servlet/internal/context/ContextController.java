@@ -117,13 +117,6 @@ public class ContextController {
 
 		long serviceId = (Long)servletContextHelperRef.getProperty(Constants.SERVICE_ID);
 
-		StringBuilder filterBuilder = new StringBuilder();
-		filterBuilder.append('(');
-		filterBuilder.append(Constants.SERVICE_ID);
-		filterBuilder.append('=');
-		filterBuilder.append(serviceId);
-		filterBuilder.append(')');
-		this.servletContextHelperRefFilter = filterBuilder.toString();
 		this.proxyContext = proxyContext;
 		this.httpServiceRuntime = httpServiceRuntime;
 		this.contextName = contextName;
@@ -847,11 +840,7 @@ public class ContextController {
 	public boolean matches(ServiceReference<?> whiteBoardService) {
 		String contextSelector = (String) whiteBoardService.getProperty(
 			HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_SELECT);
-		// make sure the context helper is either one of the built-in ones registered by this http whiteboard implementation;
-		// or is visible to the whiteboard registering bundle.
-		if (!visibleContextHelper(whiteBoardService)) {
-			return false;
-		}
+
 		if (contextSelector == null) {
 			contextSelector = httpServiceRuntime.getDefaultContextSelectFilter(whiteBoardService);
 			if (contextSelector == null) {
@@ -861,37 +850,38 @@ public class ContextController {
 			}
 		}
 
-		if (!contextSelector.startsWith(Const.OPEN_PAREN)) {
-			contextSelector = Const.OPEN_PAREN +
-				HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_NAME +
-					Const.EQUAL + contextSelector + Const.CLOSE_PAREN;
+		if (contextSelector.startsWith(Const.OPEN_PAREN)) {
+			org.osgi.framework.Filter targetFilter;
+
+			try {
+				targetFilter = FrameworkUtil.createFilter(contextSelector);
+			}
+			catch (InvalidSyntaxException ise) {
+				throw new IllegalArgumentException(ise);
+			}
+
+			if (!matches(targetFilter)) {
+				return false;
+			}
+		}
+		else if (!contextName.equals(contextSelector)) {
+			return false;
 		}
 
-		org.osgi.framework.Filter targetFilter;
+		// make sure the context helper is either one of the built-in ones registered by this http whiteboard implementation;
+		// or is visible to the whiteboard registering bundle.
 
-		try {
-			targetFilter = FrameworkUtil.createFilter(contextSelector);
-		}
-		catch (InvalidSyntaxException ise) {
-			throw new IllegalArgumentException(ise);
-		}
-
-		return matches(targetFilter);
+		return visibleContextHelper(whiteBoardService);
 	}
 
 	private boolean visibleContextHelper(ServiceReference<?> whiteBoardService) {
 		if (consumingContext.getBundle().equals(servletContextHelperRef.getBundle())) {
 			return true;
 		}
-		try {
-			if (whiteBoardService.getBundle().getBundleContext().getAllServiceReferences(ServletContextHelper.class.getName(), servletContextHelperRefFilter) != null) {
-				return true;
-			}
-		}
-		catch (InvalidSyntaxException e) {
-			// ignore
-		}
-		return false;
+
+		return servletContextHelperRef.isAssignableTo(
+			whiteBoardService.getBundle(),
+			ServletContextHelper.class.getName());
 	}
 
 	public boolean matches(org.osgi.framework.Filter targetFilter) {
@@ -1279,7 +1269,6 @@ public class ContextController {
 	private final Set<ListenerRegistration> listenerRegistrations = new HashSet<ListenerRegistration>();
 	private final ProxyContext proxyContext;
 	private final ServiceReference<ServletContextHelper> servletContextHelperRef;
-	private final String servletContextHelperRefFilter;
 	private boolean shutdown;
 	private String string;
 
