@@ -27,6 +27,7 @@ public class HttpSessionAdaptor implements HttpSession, Serializable {
 	private transient final ServletContext servletContext;
 	private transient final String attributePrefix;
 	private String string;
+	private final String id;
 
 	static public HttpSessionAdaptor createHttpSessionAdaptor(
 		HttpSession session, ServletContext servletContext, ContextController controller) {
@@ -44,6 +45,8 @@ public class HttpSessionAdaptor implements HttpSession, Serializable {
 		this.servletContext = servletContext;
 		this.controller = controller;
 		this.attributePrefix = "equinox.http." + controller.getContextName(); //$NON-NLS-1$
+
+		this.id = session.getId();
 	}
 
 	public ContextController getController() {
@@ -117,7 +120,7 @@ public class HttpSessionAdaptor implements HttpSession, Serializable {
 			// outer session is already invalidated
 		}
 
-		controller.removeActiveSession(session);
+		controller.removeActiveSession(id);
 	}
 
 	public void invokeSessionListeners (List<Class<? extends EventListener>> classes, EventListener listener) {
@@ -233,7 +236,7 @@ public class HttpSessionAdaptor implements HttpSession, Serializable {
 
 	public String getId() {
 		// Not sure this can be done per context helper
-		return session.getId();
+		return id;
 	}
 
 	public long getLastAccessedTime() {

@@ -87,17 +87,14 @@ public class HttpSessionTracker {
 				}
 			}
 
-			contextController.removeActiveSession(
-				httpSessionAdaptor.getSession());
+			contextController.removeActiveSession(httpSessionAdaptor.getId());
 		}
 	}
 
 	public static void addHttpSessionAdaptor(
 		HttpSessionAdaptor httpSessionAdaptor) {
 
-		HttpSession httpSession = httpSessionAdaptor.getSession();
-
-		String sessionId = httpSession.getId();
+		String sessionId = httpSessionAdaptor.getId();
 
 		Set<HttpSessionAdaptor> httpSessionAdaptors =
 			_httpSessionAdaptorsMap.get(sessionId);
@@ -121,12 +118,8 @@ public class HttpSessionTracker {
 	public static boolean removeHttpSessionAdaptor(
 		HttpSessionAdaptor httpSessionAdaptor) {
 
-		HttpSession httpSession = httpSessionAdaptor.getSession();
-
-		String sessionId = httpSession.getId();
-
 		Set<HttpSessionAdaptor> httpSessionAdaptors =
-			_httpSessionAdaptorsMap.get(sessionId);
+			_httpSessionAdaptorsMap.get(httpSessionAdaptor.getId());
 
 		if (httpSessionAdaptors == null) {
 			return false;
