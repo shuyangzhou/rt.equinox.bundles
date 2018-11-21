@@ -1168,8 +1168,8 @@ public class ContextController {
 		}
 	}
 
-	public void removeActiveSession(HttpSession session) {
-		activeSessions.remove(session.getId());
+	public void removeActiveSession(String id) {
+		activeSessions.remove(id);
 	}
 
 	public void fireSessionIdChanged(String oldSessionId) {
