@@ -828,8 +828,20 @@ public class ContextController {
 	}
 
 	public boolean matches(ServiceReference<?> whiteBoardService) {
+		// make sure the context helper is either one of the built-in ones registered by this http whiteboard implementation;
+		// or is visible to the whiteboard registering bundle.
+
+		if (!visibleContextHelper(whiteBoardService)) {
+			return false;
+		}
+
 		String contextSelector = (String) whiteBoardService.getProperty(
 			HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_SELECT);
+
+		// custom equinox behaviour
+		if (contextName.equals(contextSelector)) {
+			return true;
+		}
 
 		if (contextSelector == null) {
 			contextSelector = httpServiceRuntime.getDefaultContextSelectFilter(whiteBoardService);
@@ -850,18 +862,12 @@ public class ContextController {
 				throw new IllegalArgumentException(ise);
 			}
 
-			if (!matches(targetFilter)) {
-				return false;
+			if (matches(targetFilter)) {
+				return true;
 			}
 		}
-		else if (!contextName.equals(contextSelector)) {
-			return false;
-		}
 
-		// make sure the context helper is either one of the built-in ones registered by this http whiteboard implementation;
-		// or is visible to the whiteboard registering bundle.
-
-		return visibleContextHelper(whiteBoardService);
+		return false;
 	}
 
 	private boolean visibleContextHelper(ServiceReference<?> whiteBoardService) {
