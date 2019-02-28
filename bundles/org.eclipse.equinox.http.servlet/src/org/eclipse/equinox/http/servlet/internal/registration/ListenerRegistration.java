@@ -119,13 +119,11 @@ public class ListenerRegistration extends Registration<EventListener, ListenerDT
 	}
 
 	private void createContextAttributes() {
-		contextController.getProxyContext().createContextAttributes(
-			contextController);
+		contextController.createContextAttributes();
 	}
 
 	private void destroyContextAttributes() {
-		contextController.getProxyContext().destroyContextAttributes(
-			contextController);
+		contextController.destroyContextAttributes();
 	}
 
 	private class EventListenerInvocationHandler implements InvocationHandler {
