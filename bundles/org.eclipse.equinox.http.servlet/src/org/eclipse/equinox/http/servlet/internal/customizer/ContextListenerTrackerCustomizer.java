@@ -52,16 +52,20 @@ public class ContextListenerTrackerCustomizer
 		}
 
 		try {
-			String listener = (String)serviceReference.getProperty(HttpWhiteboardConstants.HTTP_WHITEBOARD_LISTENER);
+			Object listenerObj = serviceReference.getProperty(HttpWhiteboardConstants.HTTP_WHITEBOARD_LISTENER);
 
-			if (Boolean.FALSE.toString().equalsIgnoreCase(listener)) {
-				return result;
+			if (!Boolean.class.isInstance(listenerObj) &&
+				!String.class.isInstance(listenerObj)) {
+
+				throw new HttpWhiteboardFailureException(
+					HttpWhiteboardConstants.HTTP_WHITEBOARD_LISTENER + "=" + listenerObj + " is not a valid option. Ignoring!", //$NON-NLS-1$ //$NON-NLS-2$
+					DTOConstants.FAILURE_REASON_VALIDATION_FAILED);
 			}
 
-			if (!Boolean.TRUE.toString().equalsIgnoreCase(listener)) {
-				throw new HttpWhiteboardFailureException(
-					HttpWhiteboardConstants.HTTP_WHITEBOARD_LISTENER + "=" + listener + " is not a valid option. Ignoring!", //$NON-NLS-1$ //$NON-NLS-2$
-					DTOConstants.FAILURE_REASON_VALIDATION_FAILED);
+			Boolean listener = (listenerObj instanceof Boolean) ? (Boolean)listenerObj : Boolean.parseBoolean((String)listenerObj);
+
+			if (!listener.booleanValue()) {
+				return result;
 			}
 
 			result.set(contextController.addListenerRegistration(serviceReference));

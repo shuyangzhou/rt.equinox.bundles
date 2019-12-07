@@ -149,6 +149,33 @@ public class ServletTest extends TestCase {
 		}
 	}
 
+	public void test_IsListener() throws Exception {
+		ServletContextListener scl = new ServletContextListener() {
+			@Override
+			public void contextInitialized(ServletContextEvent arg0) {
+			}
+			@Override
+			public void contextDestroyed(ServletContextEvent arg0) {
+			}
+		};
+
+		ServiceReference<HttpServiceRuntime> serviceReference =
+			getBundleContext().getServiceReference(HttpServiceRuntime.class);
+		HttpServiceRuntime runtime = getBundleContext().getService(serviceReference);
+
+		Dictionary<String, Object> scListenerProps = new Hashtable<String, Object>();
+		scListenerProps.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_LISTENER, Boolean.TRUE);
+
+		ServiceRegistration<ServletContextListener> registration = getBundleContext().registerService(ServletContextListener.class, scl, scListenerProps);
+		registrations.add(registration);
+
+		RuntimeDTO runtimeDTO = runtime.getRuntimeDTO();
+		Assert.assertEquals(0, runtimeDTO.failedListenerDTOs.length);
+		Assert.assertEquals(1, runtimeDTO.servletContextDTOs.length);
+		Assert.assertEquals(1, runtimeDTO.servletContextDTOs[0].listenerDTOs.length);
+		Assert.assertEquals(registration.getReference().getProperty(Constants.SERVICE_ID), runtimeDTO.servletContextDTOs[0].listenerDTOs[0].serviceId);
+	}
+
 	public void test_ErrorPage1() throws Exception {
 		String expected = "403 ERROR :";
 		String actual = null;
