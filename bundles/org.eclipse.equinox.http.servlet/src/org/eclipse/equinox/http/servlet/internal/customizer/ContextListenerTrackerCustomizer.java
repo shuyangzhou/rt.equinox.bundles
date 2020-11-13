@@ -42,14 +42,15 @@ public class ContextListenerTrackerCustomizer
 	public AtomicReference<ListenerRegistration> addingService(
 		ServiceReference<EventListener> serviceReference) {
 
-		AtomicReference<ListenerRegistration> result = new AtomicReference<ListenerRegistration>();
-		if (!httpServiceRuntime.matches(serviceReference)) {
-			return result;
+		if (!contextController.matches(serviceReference)) {
+			return null;
 		}
 
-		if (!contextController.matches(serviceReference)) {
-			return result;
+		if (!httpServiceRuntime.matches(serviceReference)) {
+			return null;
 		}
+
+		AtomicReference<ListenerRegistration> result = new AtomicReference<ListenerRegistration>();
 
 		try {
 			Object listenerObj = serviceReference.getProperty(HttpWhiteboardConstants.HTTP_WHITEBOARD_LISTENER);

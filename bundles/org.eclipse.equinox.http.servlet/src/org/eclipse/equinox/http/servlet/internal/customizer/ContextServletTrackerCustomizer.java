@@ -42,14 +42,15 @@ public class ContextServletTrackerCustomizer
 	public AtomicReference<ServletRegistration> addingService(
 		ServiceReference<Servlet> serviceReference) {
 
-		AtomicReference<ServletRegistration> result = new AtomicReference<ServletRegistration>();
-		if (!httpServiceRuntime.matches(serviceReference)) {
-			return result;
+		if (!contextController.matches(serviceReference)) {
+			return null;
 		}
 
-		if (!contextController.matches(serviceReference)) {
-			return result;
+		if (!httpServiceRuntime.matches(serviceReference)) {
+			return null;
 		}
+
+		AtomicReference<ServletRegistration> result = new AtomicReference<ServletRegistration>();
 
 		try {
 			result.set(contextController.addServletRegistration(serviceReference));

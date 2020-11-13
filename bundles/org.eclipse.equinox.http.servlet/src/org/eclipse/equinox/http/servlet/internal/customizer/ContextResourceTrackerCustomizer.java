@@ -40,14 +40,16 @@ public class ContextResourceTrackerCustomizer
 	@Override
 	public AtomicReference<ResourceRegistration> addingService(
 		ServiceReference<Object> serviceReference) {
-		AtomicReference<ResourceRegistration> result = new AtomicReference<ResourceRegistration>();
-		if (!httpServiceRuntime.matches(serviceReference)) {
-			return result;
-		}
 
 		if (!contextController.matches(serviceReference)) {
-			return result;
+			return null;
 		}
+
+		if (!httpServiceRuntime.matches(serviceReference)) {
+			return null;
+		}
+
+		AtomicReference<ResourceRegistration> result = new AtomicReference<ResourceRegistration>();
 
 		try {
 			result.set(contextController.addResourceRegistration(serviceReference));

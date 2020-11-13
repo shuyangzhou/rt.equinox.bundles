@@ -42,14 +42,15 @@ public class ContextFilterTrackerCustomizer
 	public AtomicReference<FilterRegistration> addingService(
 		ServiceReference<Filter> serviceReference) {
 
-		AtomicReference<FilterRegistration> result = new AtomicReference<FilterRegistration>();
-		if (!httpServiceRuntime.matches(serviceReference)) {
-			return result;
+		if (!contextController.matches(serviceReference)) {
+			return null;
 		}
 
-		if (!contextController.matches(serviceReference)) {
-			return result;
+		if (!httpServiceRuntime.matches(serviceReference)) {
+			return null;
 		}
+
+		AtomicReference<FilterRegistration> result = new AtomicReference<FilterRegistration>();
 
 		try {
 			result.set(contextController.addFilterRegistration(serviceReference));
