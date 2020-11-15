@@ -42,6 +42,10 @@ public class ContextListenerTrackerCustomizer
 	public AtomicReference<ListenerRegistration> addingService(
 		ServiceReference<EventListener> serviceReference) {
 
+		if (serviceReference.getProperty(HttpWhiteboardConstants.HTTP_WHITEBOARD_LISTENER) == null) {
+			return null;
+		}
+
 		if (!contextController.matches(serviceReference)) {
 			return null;
 		}

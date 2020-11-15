@@ -41,6 +41,12 @@ public class ContextResourceTrackerCustomizer
 	public AtomicReference<ResourceRegistration> addingService(
 		ServiceReference<Object> serviceReference) {
 
+		if ((serviceReference.getProperty(HttpWhiteboardConstants.HTTP_WHITEBOARD_RESOURCE_PREFIX) == null) &&
+			(serviceReference.getProperty(HttpWhiteboardConstants.HTTP_WHITEBOARD_RESOURCE_PATTERN) == null)) {
+
+			return null;
+		}
+
 		if (!contextController.matches(serviceReference)) {
 			return null;
 		}

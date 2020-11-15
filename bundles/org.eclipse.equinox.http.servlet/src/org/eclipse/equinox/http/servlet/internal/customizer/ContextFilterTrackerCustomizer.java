@@ -42,6 +42,13 @@ public class ContextFilterTrackerCustomizer
 	public AtomicReference<FilterRegistration> addingService(
 		ServiceReference<Filter> serviceReference) {
 
+		if ((serviceReference.getProperty(HttpWhiteboardConstants.HTTP_WHITEBOARD_FILTER_PATTERN) == null) &&
+			(serviceReference.getProperty(HttpWhiteboardConstants.HTTP_WHITEBOARD_FILTER_REGEX) == null) &&
+			(serviceReference.getProperty(HttpWhiteboardConstants.HTTP_WHITEBOARD_FILTER_SERVLET) == null)) {
+
+			return null;
+		}
+
 		if (!contextController.matches(serviceReference)) {
 			return null;
 		}

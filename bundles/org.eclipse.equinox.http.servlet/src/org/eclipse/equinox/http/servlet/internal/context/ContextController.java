@@ -134,29 +134,78 @@ public class ContextController {
 		this.trackingContext = trackingContextParam;
 		this.consumingContext = consumingContext;
 
-		listenerServiceTracker = new ServiceTracker<EventListener, AtomicReference<ListenerRegistration>>(
-			trackingContext, httpServiceRuntime.getListenerFilter(),
+		servletContextListenerServiceTracker = new ServiceTracker<EventListener, AtomicReference<ListenerRegistration>>(
+			trackingContext, ServletContextListener.class.getName(),
 			new ContextListenerTrackerCustomizer(
 				trackingContext, httpServiceRuntime, this));
 
-		listenerServiceTracker.open();
+		servletContextListenerServiceTracker.open();
+
+		servletContextAttributeListenerServiceTracker = new ServiceTracker<EventListener, AtomicReference<ListenerRegistration>>(
+			trackingContext, ServletContextAttributeListener.class.getName(),
+			new ContextListenerTrackerCustomizer(
+				trackingContext, httpServiceRuntime, this));
+
+		servletContextAttributeListenerServiceTracker.open();
+
+		servletRequestListenerServiceTracker = new ServiceTracker<EventListener, AtomicReference<ListenerRegistration>>(
+			trackingContext, ServletRequestListener.class.getName(),
+			new ContextListenerTrackerCustomizer(
+				trackingContext, httpServiceRuntime, this));
+
+		servletRequestListenerServiceTracker.open();
+
+		servletRequestAttributeListenerServiceTracker = new ServiceTracker<EventListener, AtomicReference<ListenerRegistration>>(
+			trackingContext, ServletRequestAttributeListener.class.getName(),
+			new ContextListenerTrackerCustomizer(
+				trackingContext, httpServiceRuntime, this));
+
+		servletRequestAttributeListenerServiceTracker.open();
+
+		httpSessionListenerServiceTracker = new ServiceTracker<EventListener, AtomicReference<ListenerRegistration>>(
+			trackingContext, HttpSessionListener.class.getName(),
+			new ContextListenerTrackerCustomizer(
+				trackingContext, httpServiceRuntime, this));
+
+		httpSessionListenerServiceTracker.open();
+
+		httpSessionAttributeListenerServiceTracker = new ServiceTracker<EventListener, AtomicReference<ListenerRegistration>>(
+			trackingContext, HttpSessionAttributeListener.class.getName(),
+			new ContextListenerTrackerCustomizer(
+				trackingContext, httpServiceRuntime, this));
+
+		httpSessionAttributeListenerServiceTracker.open();
+
+		ServletContext servletContext = httpServiceRuntime.getParentServletContext();
+
+		if ((servletContext.getMajorVersion() >= 3) && (servletContext.getMinorVersion() > 0)) {
+			httpSessionIdListenerServiceTracker = new ServiceTracker<EventListener, AtomicReference<ListenerRegistration>>(
+				trackingContext, HttpSessionIdListener.class.getName(),
+				new ContextListenerTrackerCustomizer(
+					trackingContext, httpServiceRuntime, this));
+
+			httpSessionIdListenerServiceTracker.open();
+		}
+		else {
+			httpSessionIdListenerServiceTracker = null;
+		}
 
 		filterServiceTracker = new ServiceTracker<Filter, AtomicReference<FilterRegistration>>(
-			trackingContext, httpServiceRuntime.getFilterFilter(),
+			trackingContext, Filter.class,
 			new ContextFilterTrackerCustomizer(
 				trackingContext, httpServiceRuntime, this));
 
 		filterServiceTracker.open();
 
 		servletServiceTracker =  new ServiceTracker<Servlet, AtomicReference<ServletRegistration>>(
-			trackingContext, httpServiceRuntime.getServletFilter(),
+			trackingContext, Servlet.class,
 			new ContextServletTrackerCustomizer(
 				trackingContext, httpServiceRuntime, this));
 
 		servletServiceTracker.open();
 
 		resourceServiceTracker = new ServiceTracker<Object, AtomicReference<ResourceRegistration>>(
-			trackingContext, httpServiceRuntime.getResourceFilter(),
+			trackingContext, Object.class,
 			new ContextResourceTrackerCustomizer(
 				trackingContext, httpServiceRuntime, this));
 
@@ -575,7 +624,17 @@ public class ContextController {
 		resourceServiceTracker.close();
 		servletServiceTracker.close();
 		filterServiceTracker.close();
-		listenerServiceTracker.close();
+
+		if (httpSessionIdListenerServiceTracker != null) {
+			httpSessionIdListenerServiceTracker.close();
+		}
+
+		httpSessionAttributeListenerServiceTracker.close();
+		httpSessionListenerServiceTracker.close();
+		servletRequestAttributeListenerServiceTracker.close();
+		servletRequestListenerServiceTracker.close();
+		servletContextAttributeListenerServiceTracker.close();
+		servletContextListenerServiceTracker.close();
 
 		endpointRegistrations.clear();
 		filterRegistrations.clear();
@@ -1273,7 +1332,13 @@ public class ContextController {
 	private String string;
 
 	private final ServiceTracker<Filter, AtomicReference<FilterRegistration>> filterServiceTracker;
-	private final ServiceTracker<EventListener, AtomicReference<ListenerRegistration>> listenerServiceTracker;
+	private final ServiceTracker<EventListener, AtomicReference<ListenerRegistration>> servletContextListenerServiceTracker;
+	private final ServiceTracker<EventListener, AtomicReference<ListenerRegistration>> servletContextAttributeListenerServiceTracker;
+	private final ServiceTracker<EventListener, AtomicReference<ListenerRegistration>> servletRequestListenerServiceTracker;
+	private final ServiceTracker<EventListener, AtomicReference<ListenerRegistration>> servletRequestAttributeListenerServiceTracker;
+	private final ServiceTracker<EventListener, AtomicReference<ListenerRegistration>> httpSessionListenerServiceTracker;
+	private final ServiceTracker<EventListener, AtomicReference<ListenerRegistration>> httpSessionAttributeListenerServiceTracker;
+	private final ServiceTracker<EventListener, AtomicReference<ListenerRegistration>> httpSessionIdListenerServiceTracker;
 	private final ServiceTracker<Servlet, AtomicReference<ServletRegistration>> servletServiceTracker;
 	private final ServiceTracker<Object, AtomicReference<ResourceRegistration>> resourceServiceTracker;
 }

@@ -42,6 +42,13 @@ public class ContextServletTrackerCustomizer
 	public AtomicReference<ServletRegistration> addingService(
 		ServiceReference<Servlet> serviceReference) {
 
+		if ((serviceReference.getProperty(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_ERROR_PAGE) == null) &&
+			(serviceReference.getProperty(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_NAME) == null) &&
+			(serviceReference.getProperty(HttpWhiteboardConstants.HTTP_WHITEBOARD_SERVLET_PATTERN) == null)) {
+
+			return null;
+		}
+
 		if (!contextController.matches(serviceReference)) {
 			return null;
 		}
