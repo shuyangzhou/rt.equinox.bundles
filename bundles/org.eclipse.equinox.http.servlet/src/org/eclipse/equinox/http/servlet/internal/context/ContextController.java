@@ -373,8 +373,7 @@ public class ContextController {
 
 		for (ListenerRegistration listenerRegistration : listenerRegistrations) {
 			if (listenerRegistration.getT().equals(eventListener)) {
-				throw new ServletException(
-					"EventListener has already been registered.");
+				return null;
 			}
 		}
 
